@@ -1,0 +1,51 @@
+# Env & secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs & temp
+*.log
+logs/
+tmp/
+temp/
+.cache/
+
+# Dependencies & build
+node_modules/
+dist/
+build/
+coverage/
+vendor/
+bin/
+*.exe
+*.test
+*.out
+
+# Python
+__pycache__/
+.venv/
+venv/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+
+# Go
+# (bin/ covered above)
+
+# Docker volumes / local data
+data/
+postgres-data/
+redis-data/
+
+# Claude / local tooling
+.claude/
