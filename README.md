@@ -20,9 +20,31 @@
 |----|------|
 | 后端 | Go（Gin/Fiber） |
 | 前端 | Vue 3 + Vite |
-| 数据库 | PostgreSQL + Redis |
-| 部署 | Docker Compose |
+| 数据库 | PostgreSQL + Redis（**宿主机 / 宝塔**，非 compose 内置） |
+| 部署 | Docker Compose 单应用容器 + 阿里云镜像 |
+
+## Docker 部署方式（对齐 image2api）
+
+```text
+.env + docker-compose.yml
+  → 拉取 IMAGE_NAME 镜像
+  → 映射 APP_PORT:80
+  → host.docker.internal 连宝塔 PostgreSQL / Redis
+  → 挂载 config.json 与数据目录
+```
+
+| 文件 | 说明 |
+|------|------|
+| [`docker-compose.yml`](docker-compose.yml) | 单服务 `app` |
+| [`.env.example`](.env.example) | 环境变量模板（复制为 `.env`） |
+| [`config.json`](config.json) | 站点配置挂载 |
+| [`docs/部署说明.md`](docs/部署说明.md) | 上线步骤 |
+
+```bash
+cp .env.example .env   # 改镜像、库连接、密钥、域名
+docker compose up -d
+```
 
 ## 状态
 
-规划已定稿，尚未开始编码。实施顺序见规划文档第 14 节。
+规划 + Docker 部署骨架已定。应用镜像与业务代码尚未实现；实施顺序见规划文档第 14 节。

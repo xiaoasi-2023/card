@@ -1,0 +1,48 @@
+services:
+  app:
+    image: ${IMAGE_NAME:?please set IMAGE_NAME in .env}
+    container_name: card-app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-3000}:80"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ${APP_CONFIG_FILE:-./config.json}:/app/config.json
+      - ${APP_DATA_DIR:-./data}:/app/data
+    environment:
+      # 基础
+      APP_ENV: ${APP_ENV:-production}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
+      APP_AUTH_KEY: ${APP_AUTH_KEY:?please set APP_AUTH_KEY in .env}
+      JWT_SECRET: ${JWT_SECRET:?please set JWT_SECRET in .env}
+      CARD_ENCRYPT_KEY: ${CARD_ENCRYPT_KEY:?please set CARD_ENCRYPT_KEY in .env}
+
+      # 数据库 / 缓存（默认连宿主机，宝塔 PostgreSQL / Redis）
+      # 容器内 127.0.0.1 是容器自己，不是宿主机；用 host.docker.internal
+      DATABASE_URL: ${DATABASE_URL:?please set DATABASE_URL in .env}
+      REDIS_URL: ${REDIS_URL:-redis://host.docker.internal:6379/0}
+
+      # 邀请返利
+      INVITE_REBATE_ENABLED: ${INVITE_REBATE_ENABLED:-true}
+      INVITE_REBATE_AMOUNT: ${INVITE_REBATE_AMOUNT:-1.00}
+      MAX_AGENT_LEVEL: ${MAX_AGENT_LEVEL:-3}
+
+      # 邮件（注册 / 发卡通知）
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_TLS: ${SMTP_TLS:-true}
+
+      # 支付通道（按需填写，未填则后台可关）
+      PAYMENT_EPAY_URL: ${PAYMENT_EPAY_URL:-}
+      PAYMENT_EPAY_PID: ${PAYMENT_EPAY_PID:-}
+      PAYMENT_EPAY_KEY: ${PAYMENT_EPAY_KEY:-}
+      PAYMENT_EPUSDT_URL: ${PAYMENT_EPUSDT_URL:-}
+      PAYMENT_EPUSDT_KEY: ${PAYMENT_EPUSDT_KEY:-}
+
+      # 初始管理员（仅首次启动引导用，可留空改后台创建）
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}

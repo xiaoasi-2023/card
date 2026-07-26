@@ -1,0 +1,9 @@
+{
+  "site_name": "Card Shop",
+  "currency": "CNY",
+  "timezone": "Asia/Shanghai",
+  "guest_order_enabled": true,
+  "show_stock_count": false,
+  "pay_timeout_minutes": 15,
+  "card_display_once_hint": true
+}
