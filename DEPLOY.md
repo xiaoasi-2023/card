@@ -59,7 +59,7 @@ cd /www/docker/card
 
 ```env
 IMAGE_NAME=registry.cn-hangzhou.aliyuncs.com/jiangshitong/card:latest
-APP_PORT=3000
+APP_PORT=3201
 APP_CONFIG_FILE=/www/docker/card/config.json
 APP_DATA_DIR=/www/docker/card/data
 APP_ENV=production
@@ -89,7 +89,7 @@ docker compose run --rm app seed-catalog --replace
 
 docker compose up -d
 docker compose ps
-curl --fail http://127.0.0.1:${APP_PORT:-3000}/healthz
+curl --fail http://127.0.0.1:${APP_PORT:-3201}/healthz
 docker compose logs -f --tail=200 app
 ```
 
@@ -104,7 +104,7 @@ cd /www/docker/card
 docker compose pull
 docker compose up -d
 docker compose ps
-curl --fail http://127.0.0.1:${APP_PORT:-3000}/healthz
+curl --fail http://127.0.0.1:${APP_PORT:-3201}/healthz
 ```
 
 查看和停止：

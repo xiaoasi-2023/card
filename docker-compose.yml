@@ -7,7 +7,7 @@ services:
     restart: unless-stopped
     stop_grace_period: 15s
     ports:
-      - "${APP_PORT:-3000}:3000"
+      - "${APP_PORT:-3201}:3000"
     volumes:
       - ${APP_CONFIG_FILE:-./config.json}:/app/config.json
       - ${APP_DATA_DIR:-./data}:/app/data
@@ -17,7 +17,7 @@ services:
       APP_ADDR: :3000
       WEB_ROOT: /app/web
       APP_CONFIG_PATH: /app/config.json
-      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3201}
       DATABASE_PATH: ${DATABASE_PATH:-/app/data/card.db}
       JWT_SECRET: ${JWT_SECRET:?please set JWT_SECRET in .env}
       CARD_ENCRYPT_KEY: ${CARD_ENCRYPT_KEY:?please set CARD_ENCRYPT_KEY in .env}

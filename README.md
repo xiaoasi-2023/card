@@ -58,7 +58,7 @@ docker compose up -d
 开发环境可使用`mock`支付通道运行完整黑盒验收：
 
 ```bash
-python scripts/api_acceptance.py --base-url http://127.0.0.1:3000
+python scripts/api_acceptance.py --base-url http://127.0.0.1:3201
 ```
 
 ## 当前状态
