@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -97,6 +98,10 @@ func loadConfig() (Config, error) {
 			return config, nil
 		}
 		return Config{}, fmt.Errorf("read config file: %w", err)
+	}
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 {
+		return config, nil
 	}
 	var file fileConfig
 	if err := json.Unmarshal(data, &file); err != nil {
