@@ -1,9 +1,12 @@
 {
-  "site_name": "Card Shop",
+  "site_name": "阿巳",
   "currency": "CNY",
   "timezone": "Asia/Shanghai",
-  "guest_order_enabled": true,
+  "registration_enabled": true,
+  "guest_checkout_enabled": true,
+  "balance_payment_enabled": true,
+  "online_payment_enabled": true,
   "show_stock_count": false,
-  "pay_timeout_minutes": 15,
-  "card_display_once_hint": true
+  "max_purchase_quantity": 100,
+  "payment_timeout_minutes": 15
 }

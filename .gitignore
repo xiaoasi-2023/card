@@ -49,3 +49,6 @@ redis-data/
 
 # Claude / local tooling
 .claude/
+.playwright-cli/
+design-qa.md
+design-qa*.png

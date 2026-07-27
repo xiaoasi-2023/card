@@ -1,48 +1,55 @@
 services:
   app:
     image: ${IMAGE_NAME:?please set IMAGE_NAME in .env}
+    pull_policy: always
     container_name: card-app
+    init: true
     restart: unless-stopped
+    stop_grace_period: 15s
     ports:
-      - "${APP_PORT:-3000}:80"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "${APP_PORT:-3000}:3000"
     volumes:
       - ${APP_CONFIG_FILE:-./config.json}:/app/config.json
       - ${APP_DATA_DIR:-./data}:/app/data
     environment:
       # 基础
       APP_ENV: ${APP_ENV:-production}
+      APP_ADDR: :3000
+      WEB_ROOT: /app/web
+      APP_CONFIG_PATH: /app/config.json
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
-      APP_AUTH_KEY: ${APP_AUTH_KEY:?please set APP_AUTH_KEY in .env}
+      DATABASE_PATH: ${DATABASE_PATH:-/app/data/card.db}
       JWT_SECRET: ${JWT_SECRET:?please set JWT_SECRET in .env}
       CARD_ENCRYPT_KEY: ${CARD_ENCRYPT_KEY:?please set CARD_ENCRYPT_KEY in .env}
+      CARD_ENCRYPT_KEY_VERSION: ${CARD_ENCRYPT_KEY_VERSION:-1}
+      CARD_HASH_KEY: ${CARD_HASH_KEY:?please set CARD_HASH_KEY in .env}
+      CONTACT_ENCRYPT_KEY: ${CONTACT_ENCRYPT_KEY:?please set CONTACT_ENCRYPT_KEY in .env}
+      CONTACT_HASH_KEY: ${CONTACT_HASH_KEY:?please set CONTACT_HASH_KEY in .env}
 
-      # 数据库 / 缓存（默认连宿主机，宝塔 PostgreSQL / Redis）
-      # 容器内 127.0.0.1 是容器自己，不是宿主机；用 host.docker.internal
-      DATABASE_URL: ${DATABASE_URL:?please set DATABASE_URL in .env}
-      REDIS_URL: ${REDIS_URL:-redis://host.docker.internal:6379/0}
+      # 一期为注册用户和游客共用一家在线支付服务商
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:?please set PAYMENT_PROVIDER in .env}
+      PAYMENT_MERCHANT_ID: ${PAYMENT_MERCHANT_ID:?please set PAYMENT_MERCHANT_ID in .env}
+      PAYMENT_MERCHANT_KEY: ${PAYMENT_MERCHANT_KEY:?please set PAYMENT_MERCHANT_KEY in .env}
+      PAYMENT_TIMEOUT_MINUTES: ${PAYMENT_TIMEOUT_MINUTES:-15}
 
-      # 邀请返利
-      INVITE_REBATE_ENABLED: ${INVITE_REBATE_ENABLED:-true}
-      INVITE_REBATE_AMOUNT: ${INVITE_REBATE_AMOUNT:-1.00}
-      MAX_AGENT_LEVEL: ${MAX_AGENT_LEVEL:-3}
-
-      # 邮件（注册 / 发卡通知）
-      SMTP_HOST: ${SMTP_HOST:-}
+      # QQ 邮箱注册验证码（SMTP 465 使用隐式 TLS）
+      SMTP_HOST: ${SMTP_HOST:?please set SMTP_HOST in .env}
       SMTP_PORT: ${SMTP_PORT:-465}
-      SMTP_USERNAME: ${SMTP_USERNAME:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_USERNAME: ${SMTP_USERNAME:?please set SMTP_USERNAME in .env}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:?please set SMTP_PASSWORD in .env}
+      SMTP_FROM: ${SMTP_FROM:?please set SMTP_FROM in .env}
       SMTP_TLS: ${SMTP_TLS:-true}
-
-      # 支付通道（按需填写，未填则后台可关）
-      PAYMENT_EPAY_URL: ${PAYMENT_EPAY_URL:-}
-      PAYMENT_EPAY_PID: ${PAYMENT_EPAY_PID:-}
-      PAYMENT_EPAY_KEY: ${PAYMENT_EPAY_KEY:-}
-      PAYMENT_EPUSDT_URL: ${PAYMENT_EPUSDT_URL:-}
-      PAYMENT_EPUSDT_KEY: ${PAYMENT_EPUSDT_KEY:-}
+      REGISTRATION_CODE_HASH_KEY: ${REGISTRATION_CODE_HASH_KEY:?please set REGISTRATION_CODE_HASH_KEY in .env}
+      REGISTRATION_CODE_TTL_MINUTES: ${REGISTRATION_CODE_TTL_MINUTES:-10}
+      REGISTRATION_CODE_RESEND_SECONDS: ${REGISTRATION_CODE_RESEND_SECONDS:-60}
+      REGISTRATION_CODE_MAX_ATTEMPTS: ${REGISTRATION_CODE_MAX_ATTEMPTS:-5}
 
       # 初始管理员（仅首次启动引导用，可留空改后台创建）
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:3000/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s

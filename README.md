@@ -1,50 +1,66 @@
-# 代理卡密销售平台（卡网）
+# 多平台代理 CDK 销售系统
 
-对标 [888proxy](https://www.888proxy.com/) 的自动化卡密商城：自备卡密池发卡、多级子代理、邀请下单返利（不可提现）。
+单站点 CDK 商城。管理员维护多个代理平台的商品和自备 CDK。注册用户登录后可选择账户余额或在线支付；游客无需登录，填写 QQ 或手机号及本单查询密码后只能使用在线支付。购买完成后在订单详情查看 CDK。
+
+## 支付规则
+
+| 买家 | 支付方式 | 查单方式 |
+|---|---|---|
+| 注册用户 | 账户余额或在线支付 | 登录会员中心查看本人订单 |
+| 游客 | 在线支付 | 订单号 + 联系方式 + 本单查询密码 |
+
+不支持游客使用余额；单笔订单不支持余额与在线支付混合支付。
+
+## 一期能力
+
+- 本系统账号、余额及不可修改的余额流水
+- 管理员人工增减注册用户余额
+- 登录用户余额扣款、订单和发卡的 SQLite 原子事务
+- 登录用户或游客的单 SKU 在线支付、库存预留和幂等回调发卡
+- QQ 或手机号及每单独立查询密码的游客查单
+- 多平台代理商品、SKU 和加密 CDK 库存管理
+- SQLite 单机持久化、管理后台和操作审计
+
+一期不做用户在线充值、退款体系、提现、代理分销、多店铺、购物车和发卡通知。
 
 ## 文档
 
-- **[完整规划文档](docs/规划文档.md)** — 产品范围、多级代理、邀请返利、数据模型、API、Docker、分期路线
+- [项目规划文档](docs/规划文档.md)
+- [阿里云镜像构建与 Docker 部署](DEPLOY.md)
 
-## 关键能力
-
-- 七大代理平台 CDK 卡密池自动发货（CliProxy / Kookeey / B2Proxy / 711Proxy / IPWEB / BunnyProxy / UdealProxy）
-- 多级子代理开店、差价佣金（可提现）
-- 邀请人下单返利 ¥0.5 / ¥1，仅入账站内返利余额，不可提现
-- 充值余额 / 返利余额 / 代理佣金三账分离
-- Docker Compose 部署
-
-## 技术栈（规划）
+## 技术栈
 
 | 层 | 选型 |
-|----|------|
-| 后端 | Go（Gin/Fiber） |
+|---|---|
+| 后端 | Go + Gin + GORM |
 | 前端 | Vue 3 + Vite |
-| 数据库 | PostgreSQL + Redis（**宿主机 / 宝塔**，非 compose 内置） |
-| 部署 | Docker Compose 单应用容器 + 阿里云镜像 |
+| 数据库 | SQLite 3 |
+| 部署 | Docker Compose 单应用容器 |
 
-## Docker 部署方式（对齐 image2api）
+## 部署
 
 ```text
-.env + docker-compose.yml
-  → 拉取 IMAGE_NAME 镜像
-  → 映射 APP_PORT:80
-  → host.docker.internal 连宝塔 PostgreSQL / Redis
-  → 挂载 config.json 与数据目录
+.env + Dockerfile + docker-compose.yml
+  -> 阿里云容器镜像服务根据 Git 和 Dockerfile 构建镜像
+  -> 服务器拉取 IMAGE_NAME 镜像
+  -> 映射 APP_PORT:3000
+  -> 挂载 config.json
+  -> 挂载 /app/data，持久化 SQLite 数据库
+  -> 通过 HTTPS 接收在线支付回调
 ```
 
-| 文件 | 说明 |
-|------|------|
-| [`docker-compose.yml`](docker-compose.yml) | 单服务 `app` |
-| [`.env.example`](.env.example) | 环境变量模板（复制为 `.env`） |
-| [`config.json`](config.json) | 站点配置挂载 |
-| [`docs/部署说明.md`](docs/部署说明.md) | 上线步骤 |
-
 ```bash
-cp .env.example .env   # 改镜像、库连接、密钥、域名
+cp .env.example .env
+docker compose pull
 docker compose up -d
 ```
 
-## 状态
+开发环境可使用`mock`支付通道运行完整黑盒验收：
 
-规划 + Docker 部署骨架已定。应用镜像与业务代码尚未实现；实施顺序见规划文档第 14 节。
+```bash
+python scripts/api_acceptance.py --base-url http://127.0.0.1:3000
+```
+
+## 当前状态
+
+一期最小业务闭环已实现，开发环境提供可替换的`mock`在线支付适配器。正式上线前仍需确定唯一支付服务商，并按服务商文档接入生产支付接口、签名和回调参数。
