@@ -182,7 +182,7 @@ func (a *App) routes() *gin.Engine {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	r := gin.New()
-	r.Use(gin.Recovery(), requestIDMiddleware())
+	r.Use(gin.Recovery(), requestIDMiddleware(), corsPublicMiddleware())
 	r.GET("/healthz", func(c *gin.Context) {
 		sqlDB, err := a.db.DB()
 		if err != nil || sqlDB.PingContext(c.Request.Context()) != nil {
@@ -296,6 +296,53 @@ func (a *App) authRequired(admin bool) gin.HandlerFunc {
 			return
 		}
 		c.Set("user", user)
+		c.Next()
+	}
+}
+
+// corsPublicMiddleware 为跨域公开站调用放行。
+// 与图像站公开柜面类似：浏览器从 card.xiaoasi.xyz 直连本服务 API。
+// 仅对 /api/v1/public/ 前缀生效，管理端/登录等仍保持同站或显式鉴权。
+func corsPublicMiddleware() gin.HandlerFunc {
+	allowed := map[string]struct{}{
+		"https://card.xiaoasi.xyz":     {},
+		"http://card.xiaoasi.xyz":      {},
+		"https://www.card.xiaoasi.xyz": {},
+		"http://127.0.0.1:5179":        {},
+		"http://localhost:5179":        {},
+		"http://127.0.0.1:8780":        {},
+		"http://localhost:8780":        {},
+	}
+	// 可用环境变量追加：PUBLIC_CORS_ORIGINS=https://a.com,https://b.com
+	if extra := strings.TrimSpace(os.Getenv("PUBLIC_CORS_ORIGINS")); extra != "" {
+		for _, item := range strings.Split(extra, ",") {
+			origin := strings.TrimSpace(item)
+			if origin != "" {
+				allowed[origin] = struct{}{}
+			}
+		}
+	}
+	return func(c *gin.Context) {
+		path := c.Request.URL.Path
+		if !strings.HasPrefix(path, "/api/v1/public/") {
+			c.Next()
+			return
+		}
+		origin := strings.TrimSpace(c.GetHeader("Origin"))
+		if origin != "" {
+			if _, ok := allowed[origin]; ok {
+				c.Header("Access-Control-Allow-Origin", origin)
+				c.Header("Vary", "Origin")
+				c.Header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+				c.Header("Access-Control-Allow-Headers", "Content-Type, X-Request-Id")
+				c.Header("Access-Control-Max-Age", "86400")
+			}
+		}
+		if c.Request.Method == http.MethodOptions {
+			c.Status(http.StatusNoContent)
+			c.Abort()
+			return
+		}
 		c.Next()
 	}
 }

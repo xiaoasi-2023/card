@@ -860,3 +860,29 @@ func TestResetAdminPasswordFromEnv(t *testing.T) {
 		t.Fatalf("login after reset status=%d body=%s", res.Code, res.Body.String())
 	}
 }
+
+
+func TestPublicTrafficClaimCORS(t *testing.T) {
+	app := testApp(t)
+	req := httptest.NewRequest(http.MethodOptions, "/api/v1/public/traffic/claim", nil)
+	req.Header.Set("Origin", "https://card.xiaoasi.xyz")
+	req.Header.Set("Access-Control-Request-Method", "POST")
+	req.Header.Set("Access-Control-Request-Headers", "content-type")
+	res := httptest.NewRecorder()
+	app.router.ServeHTTP(res, req)
+	if res.Code != http.StatusNoContent {
+		t.Fatalf("preflight status=%d body=%s", res.Code, res.Body.String())
+	}
+	if got := res.Header().Get("Access-Control-Allow-Origin"); got != "https://card.xiaoasi.xyz" {
+		t.Fatalf("Allow-Origin=%q", got)
+	}
+
+	// 非公开路径不应被 CORS 放行
+	adminReq := httptest.NewRequest(http.MethodOptions, "/api/v1/admin/orders", nil)
+	adminReq.Header.Set("Origin", "https://card.xiaoasi.xyz")
+	adminRes := httptest.NewRecorder()
+	app.router.ServeHTTP(adminRes, adminReq)
+	if adminRes.Header().Get("Access-Control-Allow-Origin") != "" {
+		t.Fatalf("admin path should not expose CORS origin")
+	}
+}
