@@ -60,3 +60,18 @@ go test ./...
 ```
 
 测试覆盖余额扣款与发卡原子性、幂等购买、游客查单凭证、支付回调幂等、在线库存预留和过期释放、最后一张卡并发竞争。
+
+
+## 应急重置管理员密码
+
+忘记密码时不要做公开 URL 重置。在环境变量中临时设置：
+
+```text
+RESET_ADMIN_PASSWORD=你的新密码至少8位
+RESET_ADMIN_EMAIL=admin@example.com
+```
+
+然后重启服务。启动日志会出现 `security: reset ... admin password(s) via RESET_ADMIN_PASSWORD`。
+登录成功后**立刻清空**这两个变量并再次重启，避免密码被环境变量明文长期固定。
+
+`BOOTSTRAP_ADMIN_*` 只在库中尚无 admin 时创建账号，不会覆盖已有密码。

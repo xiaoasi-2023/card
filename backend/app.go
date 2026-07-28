@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -76,6 +77,9 @@ func newApp(config Config) (*App, error) {
 	if err := app.bootstrapAdmin(); err != nil {
 		return nil, err
 	}
+	if err := app.resetAdminPasswordFromEnv(); err != nil {
+		return nil, err
+	}
 	app.router = app.routes()
 	if _, err := app.releaseExpired(time.Now()); err != nil {
 		return nil, err
@@ -98,6 +102,80 @@ func (a *App) bootstrapAdmin() error {
 	name := strings.Split(a.config.BootstrapAdminEmail, "@")[0]
 	return a.db.Create(&User{Username: name, Email: strings.ToLower(a.config.BootstrapAdminEmail), PasswordHash: hash, Role: "admin", Status: "active"}).Error
 }
+// resetAdminPasswordFromEnv 根据 RESET_ADMIN_PASSWORD 在启动时重置管理员密码。
+// 这是运维应急手段，不是公开 URL；用完必须清掉环境变量再重启。
+func (a *App) resetAdminPasswordFromEnv() error {
+	plain := strings.TrimSpace(a.config.ResetAdminPassword)
+	if plain == "" {
+		return nil
+	}
+	if len(plain) < 8 {
+		return fmt.Errorf("RESET_ADMIN_PASSWORD 至少 8 位")
+	}
+	hash, err := passwordHash(plain)
+	if err != nil {
+		return fmt.Errorf("hash RESET_ADMIN_PASSWORD: %w", err)
+	}
+
+	query := a.db.Model(&User{}).Where("role = ?", "admin")
+	targetEmail := strings.ToLower(strings.TrimSpace(a.config.ResetAdminEmail))
+	if targetEmail != "" {
+		query = query.Where("LOWER(email) = ?", targetEmail)
+	}
+
+	var admins []User
+	if err := query.Find(&admins).Error; err != nil {
+		return fmt.Errorf("query admin for reset: %w", err)
+	}
+	if len(admins) == 0 {
+		if targetEmail != "" {
+			return fmt.Errorf("RESET_ADMIN_PASSWORD 已设置，但找不到 admin 邮箱 %s", targetEmail)
+		}
+		return fmt.Errorf("RESET_ADMIN_PASSWORD 已设置，但库中没有 admin 用户；可先配 BOOTSTRAP_ADMIN_* 创建")
+	}
+
+	now := time.Now()
+	ids := make([]uint, 0, len(admins))
+	emails := make([]string, 0, len(admins))
+	for _, admin := range admins {
+		ids = append(ids, admin.ID)
+		emails = append(emails, admin.Email)
+	}
+	result := a.db.Model(&User{}).Where("id IN ? AND role = ?", ids, "admin").Updates(map[string]any{
+		"password_hash": hash,
+		"updated_at":    now,
+		"status":        "active",
+	})
+	if result.Error != nil {
+		return fmt.Errorf("reset admin password: %w", result.Error)
+	}
+	if result.RowsAffected < 1 {
+		return fmt.Errorf("reset admin password: no rows updated")
+	}
+
+	detail, _ := json.Marshal(map[string]any{
+		"admin_ids": ids,
+		"emails":    emails,
+		"source":    "RESET_ADMIN_PASSWORD",
+	})
+	_ = a.db.Create(&AuditLog{
+		OperatorID: 0,
+		Action:     "admin.password_reset_env",
+		TargetType: "user",
+		TargetID:   fmt.Sprint(ids[0]),
+		AfterJSON:  string(detail),
+		Reason:     "startup reset via RESET_ADMIN_PASSWORD",
+		IP:         "startup",
+	}).Error
+
+	log.Printf(
+		"security: reset %d admin password(s) via RESET_ADMIN_PASSWORD (emails=%s). Clear RESET_ADMIN_PASSWORD and restart after login.",
+		result.RowsAffected,
+		strings.Join(emails, ","),
+	)
+	return nil
+}
+
 
 func (a *App) routes() *gin.Engine {
 	if a.config.Env == "production" {

@@ -47,6 +47,10 @@ services:
       # 初始管理员（仅首次启动引导用，可留空改后台创建）
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+
+      # 应急重置管理员（有值则启动时重置；用完请清空）
+      RESET_ADMIN_PASSWORD: ${RESET_ADMIN_PASSWORD:-}
+      RESET_ADMIN_EMAIL: ${RESET_ADMIN_EMAIL:-}
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:3000/healthz"]
       interval: 10s

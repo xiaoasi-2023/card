@@ -806,3 +806,57 @@ func postSignedCallback(app *App, body paymentCallbackRequest, signature string)
 	app.router.ServeHTTP(res, req)
 	return res
 }
+
+
+func TestResetAdminPasswordFromEnv(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "reset-admin.db")
+	config := Config{
+		Env: "test", DatabasePath: dbPath, BaseURL: "http://example.test", JWTSecret: "jwt-test-key",
+		CardEncryptKey: "card-encrypt-test", CardHashKey: "card-hash-test", ContactEncryptKey: "contact-encrypt-test", ContactHashKey: "contact-hash-test",
+		PaymentProvider: "mock", PaymentMerchantID: "mock-merchant", PaymentMerchantKey: "payment-test-key", PaymentTimeout: time.Minute, MaxPurchaseQuantity: 100,
+		RegistrationEnabled: true, SMTPHost: "smtp.example.test", SMTPPort: 465, SMTPUsername: "sender@example.test", SMTPPassword: "test-only-password",
+		SMTPFrom: "sender@example.test", SMTPTLS: true, RegistrationCodeHashKey: "registration-code-test-key", RegistrationCodeTTL: 10 * time.Minute,
+		RegistrationCodeResendInterval: time.Minute, RegistrationCodeMaxAttempts: 5,
+		BootstrapAdminEmail: "admin@example.com", BootstrapAdminPassword: "old-password-should-not-login",
+	}
+	app, err := newApp(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, _ := app.db.DB()
+	_ = sqlDB.Close()
+
+	// 启动时带 RESET_ADMIN_PASSWORD 应覆盖已有 admin 密码
+	config.ResetAdminPassword = "NewAdminPass123"
+	config.ResetAdminEmail = "admin@example.com"
+	config.BootstrapAdminPassword = "" // 已有 admin，bootstrap 不会再生
+	app2, err := newApp(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		sqlDB, _ := app2.db.DB()
+		_ = sqlDB.Close()
+	})
+
+	var admin User
+	if err := app2.db.Where("email = ?", "admin@example.com").First(&admin).Error; err != nil {
+		t.Fatal(err)
+	}
+	if !passwordMatches(admin.PasswordHash, "NewAdminPass123") {
+		t.Fatal("admin password was not reset from env")
+	}
+	if passwordMatches(admin.PasswordHash, "old-password-should-not-login") {
+		t.Fatal("old password should no longer match")
+	}
+
+	// 登录接口应接受新密码
+	res := postJSON(app2, "/api/v1/auth/login", map[string]string{
+		"login":    "admin@example.com",
+		"password": "NewAdminPass123",
+	})
+	if res.Code != http.StatusOK {
+		t.Fatalf("login after reset status=%d body=%s", res.Code, res.Body.String())
+	}
+}

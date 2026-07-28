@@ -33,6 +33,11 @@ type Config struct {
 	ShowStockCount                 bool
 	BootstrapAdminEmail            string
 	BootstrapAdminPassword         string
+	// ResetAdminPassword 非空时，启动会把目标管理员密码重置为该值。
+	// 用完务必清空环境变量并重启，避免密码被环境变量明文长期固定。
+	ResetAdminPassword string
+	// ResetAdminEmail 可选；为空重置全部 admin，有值则只重置该邮箱。
+	ResetAdminEmail                string
 	SMTPHost                       string
 	SMTPPort                       int
 	SMTPUsername                   string
@@ -80,6 +85,8 @@ func loadConfig() (Config, error) {
 		OnlinePaymentEnabled:           true,
 		BootstrapAdminEmail:            os.Getenv("BOOTSTRAP_ADMIN_EMAIL"),
 		BootstrapAdminPassword:         os.Getenv("BOOTSTRAP_ADMIN_PASSWORD"),
+		ResetAdminPassword:             os.Getenv("RESET_ADMIN_PASSWORD"),
+		ResetAdminEmail:                strings.TrimSpace(os.Getenv("RESET_ADMIN_EMAIL")),
 		SMTPHost:                       strings.TrimSpace(os.Getenv("SMTP_HOST")),
 		SMTPPort:                       envInt("SMTP_PORT", 465),
 		SMTPUsername:                   strings.TrimSpace(os.Getenv("SMTP_USERNAME")),
