@@ -252,7 +252,7 @@ onBeforeUnmount(stopCountdown)
           <RouterLink :to="alternateAuth">{{ register ? '直接登录' : '免费注册' }}</RouterLink>
         </p>
         <span class="auth-link-divider" aria-hidden="true"></span>
-        <RouterLink class="guest-link" to="/products">游客购买</RouterLink>
+        <RouterLink class="guest-link" to="/?catalog=all">游客购买</RouterLink>
       </footer>
     </div>
   </section>
@@ -260,20 +260,21 @@ onBeforeUnmount(stopCountdown)
 
 <style scoped>
 .auth-page {
-  --auth-accent: #16784b;
-  --auth-ink: #101820;
-  min-height: calc(100vh - 138px);
+  --auth-accent: var(--brand);
+  --auth-ink: var(--ink);
+  min-height: calc(100vh - 180px);
   padding: clamp(22px, 4vh, 38px) 18px;
-  background: #edf1f2;
+  background: var(--canvas);
 }
 
 .auth-box {
   width: min(500px, 100%);
   padding: 28px 30px 24px;
-  border: 1px solid #d6dde0;
-  border-top: 3px solid #17232c;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--nav);
   border-radius: 8px;
-  box-shadow: 0 22px 60px rgb(16 31 38 / 10%);
+  box-shadow: var(--shadow);
+  background: #fff;
   animation: auth-enter 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
@@ -313,7 +314,7 @@ onBeforeUnmount(stopCountdown)
 .auth-kicker {
   display: block;
   margin-bottom: 5px;
-  color: #287b59;
+  color: var(--brand);
   font-family: Consolas, "SFMono-Regular", monospace;
   font-size: 10px;
   font-weight: 700;
@@ -380,8 +381,8 @@ onBeforeUnmount(stopCountdown)
 }
 
 .input-with-leading:focus-within {
-  border-color: #4e8e70;
-  box-shadow: 0 0 0 3px rgb(22 120 75 / 10%);
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(8, 120, 255, 0.12);
   background: #fff;
 }
 
@@ -430,10 +431,11 @@ onBeforeUnmount(stopCountdown)
   min-height: 44px;
   border-radius: 6px;
   background: var(--auth-accent);
+  color: #fff;
 }
 
 .auth-submit:hover {
-  background: #0d673e;
+  background: var(--brand-strong);
 }
 
 .auth-links {

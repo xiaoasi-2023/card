@@ -3,9 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { gsap } from 'gsap'
 import {
-  ArrowRight,
   BadgeCheck,
-  Bolt,
   Check,
   ChevronRight,
   CircleAlert,
@@ -17,6 +15,7 @@ import {
 import { publicApi, rows } from '@/api/services'
 import type { Platform, Product } from '@/types'
 import PlatformMark from '@/components/PlatformMark.vue'
+import ProductCard from '@/components/ProductCard.vue'
 
 type SortKey = 'default' | 'latest' | 'stock' | 'price-asc' | 'price-desc'
 type CatalogMode = 'all' | 'hot'
@@ -140,18 +139,6 @@ const emptyTitle = computed(() => {
   if (selectedPlatform.value !== 'all') return '该平台暂无可售商品'
   return '暂无可售商品'
 })
-
-function platformTone(slug: string) {
-  if (slug.includes('kookeey')) return 'emerald'
-  if (slug.includes('bunny')) return 'ember'
-  if (slug.includes('cliproxy')) return 'violet'
-  return 'azure'
-}
-
-function formatMoney(value: number | null) {
-  if (value === null) return '暂无报价'
-  return `¥ ${value.toFixed(2)}`
-}
 
 function queryValue(value: unknown) {
   return Array.isArray(value) ? String(value[0] || '') : String(value || '')
@@ -383,39 +370,17 @@ onUnmounted(() => {
       </div>
 
       <div v-else-if="shownProducts.length" class="market-product-grid" aria-live="polite">
-        <article
+        <ProductCard
           v-for="product in shownProducts"
           :key="product.marketKey"
           class="market-product-card market-animate"
-        >
-          <div class="market-product-visual" :data-tone="platformTone(product.platformKey)">
-            <span class="market-network-lines" aria-hidden="true"></span>
-            <PlatformMark
-              class="market-card-logo"
-              :name="product.displayPlatform?.name || '平台未配置'"
-              size="md"
-            />
-          </div>
-          <div class="market-product-body">
-            <h2>{{ product.name }}</h2>
-            <ul v-if="product.highlights.length">
-              <li v-for="feature in product.highlights" :key="feature">{{ feature }}</li>
-            </ul>
-            <p v-else class="market-product-description-empty">暂无商品说明</p>
-            <div class="market-stock-row">
-              <span v-if="product.displayStock !== null">库存 <strong>{{ product.displayStock }}</strong></span>
-              <span v-else>库存以结算为准</span>
-              <span class="market-delivery-badge"><Bolt :size="13" />立即发货</span>
-            </div>
-            <div class="market-product-foot">
-              <strong>{{ formatMoney(product.displayPrice) }}</strong>
-              <RouterLink :to="`/products/${product.slug}`">
-                立即购买
-                <ArrowRight :size="15" />
-              </RouterLink>
-            </div>
-          </div>
-        </article>
+          :product="product"
+          :platform="product.displayPlatform"
+          :highlights="product.highlights"
+          :display-price="product.displayPrice"
+          :display-stock="product.displayStock"
+          :animate="false"
+        />
       </div>
       <div v-else-if="!catalogError" class="market-empty">
         <ShoppingBag :size="30" />
@@ -475,18 +440,18 @@ onUnmounted(() => {
 
 <style scoped>
 .market-page {
-  --market-blue: #1268f3;
-  --market-orange: #ff4f12;
-  --market-ink: #101725;
-  --market-muted: #5e6878;
-  --market-line: #dce2ea;
+  --market-blue: var(--brand);
+  --market-orange: var(--cta);
+  --market-ink: var(--ink);
+  --market-muted: var(--muted);
+  --market-line: var(--line);
   min-height: 100%;
   color: var(--market-ink);
-  background: #f7f9fc;
+  background: var(--canvas);
 }
 
 .market-container {
-  width: min(1360px, calc(100% - 48px));
+  width: var(--container);
   margin: 0 auto;
 }
 
@@ -715,218 +680,6 @@ onUnmounted(() => {
   gap: 18px;
 }
 
-.market-product-card {
-  min-width: 0;
-  overflow: hidden;
-  border: 1px solid #dce2ea;
-  border-radius: 6px;
-  background: #fff;
-  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
-  will-change: transform, opacity;
-}
-
-.market-product-card:hover {
-  z-index: 1;
-  border-color: #9eb4d2;
-  box-shadow: 0 14px 32px rgba(28, 45, 69, 0.12);
-  transform: translateY(-4px);
-}
-
-.market-product-visual {
-  position: relative;
-  height: 82px;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  background: #071329;
-}
-
-.market-product-visual[data-tone='violet'] {
-  background: #100d29;
-}
-
-.market-product-visual[data-tone='emerald'] {
-  background: #071812;
-}
-
-.market-product-visual[data-tone='ember'] {
-  background: #1b0c05;
-}
-
-.market-network-lines {
-  position: absolute;
-  inset: -8px;
-  background: url('/art/server-aisle-blue.png') center / cover no-repeat;
-  opacity: 0.62;
-  pointer-events: none;
-  transform: scale(1.04);
-  will-change: transform;
-}
-
-.market-product-visual[data-tone='violet'] .market-network-lines {
-  background-image: url('/art/network-mesh-blue.png');
-  filter: hue-rotate(34deg) saturate(1.18);
-}
-
-.market-product-visual[data-tone='emerald'] .market-network-lines {
-  background-image: url('/art/network-mesh-blue.png');
-  filter: hue-rotate(106deg) saturate(0.9);
-}
-
-.market-product-visual[data-tone='ember'] .market-network-lines {
-  background-image: url('/art/global-routing-orange.png');
-  filter: none;
-}
-
-.market-card-logo {
-  position: relative;
-  z-index: 1;
-}
-
-.market-product-visual :deep(.platform-mark--md) {
-  width: 114px;
-  max-width: 70%;
-  height: 42px;
-  color: #fff;
-}
-
-.market-product-visual :deep(.platform-mark:not(.platform-mark--logo)) {
-  border-color: rgba(255, 255, 255, 0.35);
-  color: #fff;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.market-product-visual :deep(.platform-mark--kookeey) {
-  padding: 8px 11px;
-  background: #0b1c16;
-}
-
-.market-product-visual :deep(.platform-mark--cliproxy img),
-.market-product-visual :deep(.platform-mark--b2proxy img),
-.market-product-visual :deep(.platform-mark--711proxy img),
-.market-product-visual :deep(.platform-mark--ipweb img) {
-  filter: brightness(0) invert(1);
-}
-
-.market-product-body {
-  padding: 11px 13px 10px;
-}
-
-.market-product-body h2 {
-  min-height: 34px;
-  margin: 0 0 5px;
-  overflow: hidden;
-  color: #151d2b;
-  font-size: 15px;
-  line-height: 1.4;
-  font-weight: 700;
-}
-
-.market-product-body ul {
-  min-height: 48px;
-  display: grid;
-  align-content: start;
-  gap: 2px;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  list-style: none;
-  color: #5f6b7c;
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.market-product-description-empty {
-  min-height: 48px;
-  display: grid;
-  align-content: start;
-  margin: 0;
-  color: #8a94a3;
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.market-product-body li {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.market-stock-row {
-  min-height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  margin-top: 5px;
-  color: #748092;
-  font-size: 11px;
-}
-
-.market-stock-row > span:first-child strong {
-  color: #21935c;
-  font-weight: 700;
-}
-
-.market-delivery-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 3px 6px;
-  border: 1px solid #bfe7cf;
-  border-radius: 4px;
-  color: #21935c;
-  background: #f1fbf5;
-  white-space: nowrap;
-}
-
-.market-product-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding-top: 6px;
-  border-top: 1px solid #edf0f4;
-}
-
-.market-product-foot > strong {
-  min-width: 0;
-  overflow: hidden;
-  color: #151d29;
-  font-family: Arial, sans-serif;
-  font-size: 17px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.market-product-foot a {
-  min-height: 30px;
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  padding: 0 10px;
-  border-radius: 4px;
-  color: #fff;
-  background: var(--market-orange);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.market-product-foot a:hover {
-  background: #e73f06;
-  box-shadow: 0 6px 14px rgba(255, 79, 18, 0.2);
-}
-
-.market-product-foot a svg {
-  transition: transform 180ms ease;
-}
-
-.market-product-foot a:hover svg {
-  transform: translateX(2px);
-}
-
 .market-empty {
   min-height: 380px;
   display: grid;
@@ -1098,10 +851,6 @@ onUnmounted(() => {
 }
 
 @media (max-width: 820px) {
-  .market-container {
-    width: min(100% - 28px, 1360px);
-  }
-
   .market-filter-row {
     grid-template-columns: 1fr;
     padding-top: 8px;
@@ -1190,14 +939,6 @@ onUnmounted(() => {
     grid-template-columns: 1fr;
   }
 
-  .market-product-visual {
-    height: 112px;
-  }
-
-  .market-product-body h2 {
-    min-height: 0;
-  }
-
   .market-sort-group .market-filter-label {
     display: none;
   }
@@ -1217,12 +958,6 @@ onUnmounted(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .market-product-card,
-  .market-product-foot a svg {
-    transition: none;
-  }
-
-  .market-product-card:hover,
   .market-platform-tab:hover {
     transform: none;
   }

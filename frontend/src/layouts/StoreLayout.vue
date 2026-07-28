@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import {
+  BadgeCheck,
   CirclePlus,
+  Headphones,
   LogOut,
   Menu,
   Search,
@@ -10,6 +12,7 @@ import {
   UserRound,
   WalletCards,
   X,
+  Zap,
 } from 'lucide-vue-next'
 import { gsap } from 'gsap'
 import { useAuthStore } from '@/stores/auth'
@@ -26,6 +29,16 @@ let menuTween: gsap.core.Tween | undefined
 
 const prefersReducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
 const balance = () => `¥${Number(auth.user?.balance ?? 0).toFixed(2)}`
+
+const isCatalogAll = computed(() => {
+  if (route.path !== '/' && route.path !== '/products') return false
+  return String(route.query.catalog || 'all') !== 'hot'
+})
+
+const isCatalogHot = computed(() => {
+  if (route.path !== '/' && route.path !== '/products') return false
+  return String(route.query.catalog || '') === 'hot'
+})
 
 function animateMobileMenu(entering: boolean, onComplete?: () => void) {
   if (!mobileNav.value || window.innerWidth > 760 || prefersReducedMotion()) {
@@ -92,7 +105,7 @@ onMounted(() => {
     gsap
       .timeline({ defaults: { ease: 'power3.out' } })
       .from('.brand', { autoAlpha: 0, x: -18, duration: 0.48 })
-      .from('.header-action', { autoAlpha: 0, x: 12, duration: 0.34, stagger: 0.045 }, '-=0.26')
+      .from('.header-action, .catalog-link', { autoAlpha: 0, x: 12, duration: 0.34, stagger: 0.045 }, '-=0.26')
   }, root.value)
 
   window.addEventListener('keydown', handleKeydown)
@@ -118,12 +131,21 @@ onUnmounted(() => {
           <span class="brand-name">阿巳</span>
         </RouterLink>
 
+        <nav class="catalog-nav" aria-label="商品导航">
+          <RouterLink class="catalog-link" :class="{ 'is-active': isCatalogAll }" to="/?catalog=all">
+            全部商品
+          </RouterLink>
+          <RouterLink class="catalog-link" :class="{ 'is-active': isCatalogHot }" to="/?catalog=hot">
+            热门推荐
+          </RouterLink>
+        </nav>
+
         <button
           class="mobile-toggle mobile-only"
           type="button"
           aria-controls="store-navigation"
           :aria-expanded="open"
-          :aria-label="open ? '关闭账户菜单' : '打开账户菜单'"
+          :aria-label="open ? '关闭菜单' : '打开菜单'"
           @click="toggleMenu"
         >
           <X v-if="open" />
@@ -137,6 +159,15 @@ onUnmounted(() => {
           :class="{ open }"
           aria-label="账户与订单"
         >
+          <div class="mobile-catalog mobile-only">
+            <RouterLink class="catalog-link" :class="{ 'is-active': isCatalogAll }" to="/?catalog=all">
+              全部商品
+            </RouterLink>
+            <RouterLink class="catalog-link" :class="{ 'is-active': isCatalogHot }" to="/?catalog=hot">
+              热门推荐
+            </RouterLink>
+          </div>
+
           <div class="nav-actions">
             <RouterLink class="query-control header-action" to="/guest/orders">
               <Search :size="18" aria-hidden="true" />
@@ -188,12 +219,45 @@ onUnmounted(() => {
       </div>
     </header>
 
+    <div class="trust-bar" aria-label="服务承诺">
+      <div class="container trust-inner">
+        <div class="trust-item">
+          <span class="trust-icon"><Zap :size="16" /></span>
+          <div>
+            <strong>自动发货：支付后立即显示 CDK</strong>
+            <small>支付完成后，订单页面直接查看卡密</small>
+          </div>
+        </div>
+        <div class="trust-item">
+          <span class="trust-icon"><BadgeCheck :size="16" /></span>
+          <div>
+            <strong>余额可用：支持余额与在线支付</strong>
+            <small>注册用户可使用余额或在线支付</small>
+          </div>
+        </div>
+        <div class="trust-item">
+          <span class="trust-icon"><Headphones :size="16" /></span>
+          <div>
+            <strong>客服在线：7×12 小时</strong>
+            <small>专业客服及时为您服务解答</small>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <main><RouterView /></main>
 
     <footer class="site-footer">
       <div class="container footer-inner">
-        <span>阿巳 · 多平台代理 CDK</span>
-        <span>数字商品交付后不支持退款</span>
+        <div class="footer-brand">
+          <span class="footer-title">阿巳 · 多平台代理 CDK</span>
+          <span>数字商品交付后不支持退款，请确认规格后再下单</span>
+        </div>
+        <div class="footer-links">
+          <RouterLink to="/guest/orders">订单查询</RouterLink>
+          <RouterLink to="/auth/login">会员登录</RouterLink>
+          <RouterLink to="/?catalog=all">全部商品</RouterLink>
+        </div>
       </div>
     </footer>
   </div>
@@ -209,8 +273,8 @@ onUnmounted(() => {
 }
 
 .header-inner {
-  width: min(1420px, calc(100% - 48px));
-  gap: 36px;
+  width: var(--container);
+  gap: 28px;
 }
 
 .brand {
@@ -225,8 +289,8 @@ onUnmounted(() => {
   width: 36px;
   height: 36px;
   border-radius: 4px;
-  background: #0878ff;
-  color: #020911;
+  background: var(--brand);
+  color: #fff;
   box-shadow: 0 0 0 1px rgb(255 255 255 / 7%) inset;
   font-size: 21px;
   font-weight: 900;
@@ -236,8 +300,41 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
-.main-nav {
+.catalog-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   flex: 1;
+  min-width: 0;
+}
+
+.catalog-link {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 14px;
+  border-radius: 5px;
+  color: #c5ced8;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.catalog-link:hover,
+.catalog-link:focus-visible {
+  color: #fff;
+  background: #11151a;
+  outline: none;
+}
+
+.catalog-link.is-active {
+  color: #fff;
+  background: #111820;
+  box-shadow: inset 0 -2px 0 var(--brand);
+}
+
+.main-nav {
+  flex: none;
   min-width: 0;
   justify-content: flex-end;
   gap: 28px;
@@ -246,9 +343,6 @@ onUnmounted(() => {
 .nav-actions {
   display: flex;
   align-items: center;
-}
-
-.nav-actions {
   gap: 12px;
 }
 
@@ -303,8 +397,8 @@ onUnmounted(() => {
 }
 
 .register-link {
-  border-color: #0878ff;
-  background: #0878ff;
+  border-color: var(--brand);
+  background: var(--brand);
   color: #fff;
 }
 
@@ -359,14 +453,14 @@ onUnmounted(() => {
   margin-left: auto;
   padding: 0 8px;
   border-radius: 4px;
-  background: #0878ff;
+  background: var(--brand);
   color: #fff;
   font-size: 12px;
 }
 
 .balance-link:hover,
 .balance-link:focus-visible {
-  border-color: #0878ff;
+  border-color: var(--brand);
   background: #0c1724;
   outline: none;
 }
@@ -388,15 +482,132 @@ onUnmounted(() => {
   background: #0d1116;
   color: #fff;
   padding: 0;
+  margin-left: auto;
 }
 
 .mobile-toggle svg {
   width: 20px;
 }
 
+.mobile-catalog {
+  display: none;
+}
+
+.trust-bar {
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+}
+
+.trust-inner {
+  width: var(--container);
+  min-height: 72px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: center;
+}
+
+.trust-item {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  border-left: 1px solid var(--line);
+}
+
+.trust-item:first-child {
+  border-left: 0;
+  padding-left: 0;
+}
+
+.trust-icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  border-radius: 50%;
+  color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.trust-item strong {
+  display: block;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trust-item small {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.site-footer {
+  border-top: 1px solid var(--line);
+  background: #fff;
+}
+
+.footer-inner {
+  width: var(--container);
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.footer-brand {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.footer-title {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.footer-links {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.footer-links a:hover {
+  color: var(--brand);
+}
+
 @media (max-width: 1180px) {
   .account-link {
     display: none;
+  }
+
+  .catalog-nav {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .trust-item small {
+    display: none;
+  }
+
+  .trust-item {
+    padding: 12px 12px;
   }
 }
 
@@ -406,13 +617,17 @@ onUnmounted(() => {
   }
 
   .header-inner {
-    width: min(100% - 28px, 1180px);
+    width: var(--container);
   }
 
   .brand-mark {
     width: 33px;
     height: 33px;
     font-size: 19px;
+  }
+
+  .catalog-nav {
+    display: none;
   }
 
   .main-nav {
@@ -423,6 +638,7 @@ onUnmounted(() => {
     display: none;
     max-height: calc(100vh - 60px);
     align-items: stretch;
+    flex-direction: column;
     gap: 10px;
     overflow-y: auto;
     padding: 14px;
@@ -433,6 +649,26 @@ onUnmounted(() => {
 
   .main-nav.open {
     display: flex;
+  }
+
+  .mobile-catalog {
+    display: grid;
+    gap: 4px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #242b33;
+  }
+
+  .mobile-catalog .catalog-link {
+    width: 100%;
+    min-height: 44px;
+    justify-content: flex-start;
+    color: #eef2f7;
+  }
+
+  .mobile-catalog .catalog-link.is-active {
+    color: #fff;
+    background: #111820;
+    box-shadow: inset 3px 0 0 var(--brand);
   }
 
   .nav-actions {
@@ -470,11 +706,43 @@ onUnmounted(() => {
   .square-action[aria-label]::after {
     content: attr(aria-label);
   }
+
+  .trust-inner {
+    grid-template-columns: 1fr;
+    min-height: 0;
+    padding: 8px 0;
+  }
+
+  .trust-item {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    padding: 12px 0;
+  }
+
+  .trust-item:first-child {
+    border-top: 0;
+  }
+
+  .trust-item small {
+    display: block;
+  }
+
+  .footer-inner {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 20px 0;
+  }
+
+  .footer-links {
+    flex-wrap: wrap;
+    gap: 12px 16px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .main-nav a,
-  .main-nav button {
+  .main-nav button,
+  .catalog-link {
     transition: none;
   }
 }

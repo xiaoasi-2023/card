@@ -1,31 +1,73 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import { ArrowRight, Zap } from 'lucide-vue-next'
+import { ArrowRight, Bolt } from 'lucide-vue-next'
 import { gsap } from 'gsap'
-import type { Product } from '@/types'
+import type { Platform, Product } from '@/types'
 import { money } from '@/utils'
 import PlatformMark from './PlatformMark.vue'
 
-const props = defineProps<{ product: Product }>()
+const props = defineProps<{
+  product: Product
+  platform?: Platform
+  highlights?: string[]
+  displayPrice?: number | null
+  displayStock?: number | null
+  animate?: boolean
+}>()
 
 const cardRoot = ref<HTMLElement>()
 const networkLayer = ref<HTMLElement>()
 const ctaIcon = ref<HTMLElement>()
+
 const titleId = computed(() => `product-card-title-${props.product.id}`)
 const descriptionId = computed(() => `product-card-description-${props.product.id}`)
 
+const resolvedPlatform = computed(() => props.platform || props.product.platform)
+const platformKey = computed(() => resolvedPlatform.value?.slug || String(props.product.platform_id || 'unassigned'))
+
 const activeSkus = computed(() => (props.product.skus || []).filter((sku) => sku.enabled !== false))
-const hasStockCount = computed(() => activeSkus.value.some((sku) => sku.stock !== undefined))
-const availableStock = computed(() => activeSkus.value.reduce((total, sku) => total + Math.max(0, Number(sku.stock || 0)), 0))
-const stockText = computed(() => hasStockCount.value ? `库存 ${availableStock.value}` : '库存充足')
-const specText = computed(() => {
-  const skus = activeSkus.value
-  if (!skus.length) return '标准 CDK 授权'
-  if (skus.length === 1) return skus[0].name
-  return `${skus.length} 种规格 · ${skus[0].name}起`
+
+const resolvedPrice = computed(() => {
+  if (props.displayPrice !== undefined) return props.displayPrice
+  const value = Number(props.product.min_price ?? activeSkus.value[0]?.price)
+  return Number.isFinite(value) && value > 0 ? value : null
 })
-const displayPrice = computed(() => props.product.min_price ?? activeSkus.value[0]?.price ?? 0)
+
+const resolvedStock = computed(() => {
+  if (props.displayStock !== undefined) return props.displayStock
+  const skusWithStock = activeSkus.value.filter((sku) => typeof sku.stock === 'number')
+  if (!skusWithStock.length) return null
+  return skusWithStock.reduce((total, sku) => total + Number(sku.stock), 0)
+})
+
+const resolvedHighlights = computed(() => {
+  if (props.highlights) return props.highlights
+  const description = props.product.description?.trim()
+  if (!description) return []
+  return description
+    .split(/[，。；、]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 3)
+})
+
+const priceText = computed(() => {
+  if (resolvedPrice.value === null) return '暂无报价'
+  return money(resolvedPrice.value)
+})
+
+const stockText = computed(() => {
+  if (resolvedStock.value === null) return '库存以结算为准'
+  return `库存 ${resolvedStock.value}`
+})
+
+function platformTone(slug: string) {
+  if (slug.includes('kookeey')) return 'emerald'
+  if (slug.includes('bunny')) return 'ember'
+  if (slug.includes('cliproxy')) return 'violet'
+  return 'azure'
+}
 
 type ProductCardContext = ReturnType<typeof gsap.context> & {
   activate?: () => void
@@ -65,30 +107,27 @@ onMounted(() => {
   const icon = ctaIcon.value
   if (!root || !network || !icon) return
   reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  if (reducedMotion) return
+  if (reducedMotion || props.animate === false) return
 
   animationContext = gsap.context((context) => {
     const scopedContext = context as ProductCardContext
 
     scopedContext.add('activate', () => {
       gsap.to(root, {
-        y: -6,
-        scale: 1.012,
-        duration: 0.32,
+        y: -4,
+        duration: 0.28,
         ease: 'power3.out',
         overwrite: 'auto',
       })
       gsap.to(network, {
-        x: 5,
-        y: -2,
-        scale: 1.025,
-        duration: 0.45,
+        scale: 1.04,
+        duration: 0.4,
         ease: 'power3.out',
         overwrite: 'auto',
       })
       gsap.to(icon, {
-        x: 3,
-        duration: 0.24,
+        x: 2,
+        duration: 0.22,
         ease: 'power2.out',
         overwrite: 'auto',
       })
@@ -97,22 +136,19 @@ onMounted(() => {
     scopedContext.add('deactivate', () => {
       gsap.to(root, {
         y: 0,
-        scale: 1,
-        duration: 0.38,
+        duration: 0.32,
         ease: 'power3.out',
         overwrite: 'auto',
       })
       gsap.to(network, {
-        x: 0,
-        y: 0,
         scale: 1,
-        duration: 0.5,
+        duration: 0.42,
         ease: 'power3.out',
         overwrite: 'auto',
       })
       gsap.to(icon, {
         x: 0,
-        duration: 0.28,
+        duration: 0.24,
         ease: 'power2.out',
         overwrite: 'auto',
       })
@@ -120,26 +156,12 @@ onMounted(() => {
 
     scopedContext.add('press', () => {
       gsap.to(root, {
-        y: -2,
-        scale: 0.99,
+        y: -1,
+        scale: 0.995,
         duration: 0.12,
         ease: 'power2.out',
         overwrite: 'auto',
       })
-      gsap.to(icon, {
-        x: 1,
-        duration: 0.12,
-        ease: 'power2.out',
-        overwrite: 'auto',
-      })
-    })
-
-    gsap.from(root, {
-      autoAlpha: 0,
-      y: 18,
-      duration: 0.55,
-      ease: 'power3.out',
-      clearProps: 'visibility,opacity',
     })
   }, root) as ProductCardContext
 })
@@ -161,38 +183,33 @@ onUnmounted(() => {
     @focusin="activate"
     @focusout="deactivateAfterFocus"
   >
-    <header class="pcard__visual">
+    <header class="pcard__visual" :data-tone="platformTone(platformKey)">
       <span ref="networkLayer" class="pcard__network" aria-hidden="true" />
       <div class="pcard__brand">
-        <PlatformMark :name="product.platform?.name" size="lg" />
+        <PlatformMark :name="resolvedPlatform?.name || '平台未配置'" size="md" />
       </div>
-      <span class="pcard__visual-label">{{ product.platform?.name || '数字授权' }}</span>
     </header>
 
     <div class="pcard__body">
-      <div class="pcard__eyebrow">
-        <span>{{ product.platform?.name || '代理平台' }}</span>
-        <span class="pcard__delivery"><Zap :size="12" aria-hidden="true" />即时发货</span>
-      </div>
-
       <h3 :id="titleId" class="pcard__title">{{ product.name }}</h3>
-      <p :id="descriptionId" class="pcard__description">
-        {{ product.description || '支付完成后，CDK 将即时展示在订单中。' }}
-      </p>
 
-      <div class="pcard__spec-row">
-        <span class="pcard__spec">{{ specText }}</span>
-        <span class="pcard__stock" :class="{ 'pcard__stock--empty': hasStockCount && availableStock === 0 }">
-          <i aria-hidden="true" />{{ stockText }}
+      <ul v-if="resolvedHighlights.length" :id="descriptionId" class="pcard__highlights">
+        <li v-for="feature in resolvedHighlights" :key="feature">{{ feature }}</li>
+      </ul>
+      <p v-else :id="descriptionId" class="pcard__empty">暂无商品说明</p>
+
+      <div class="pcard__stock-row">
+        <span class="pcard__stock" :class="{ 'is-empty': resolvedStock === 0 }">
+          <template v-if="resolvedStock !== null">
+            库存 <strong>{{ resolvedStock }}</strong>
+          </template>
+          <template v-else>{{ stockText }}</template>
         </span>
+        <span class="pcard__delivery"><Bolt :size="13" aria-hidden="true" />立即发货</span>
       </div>
 
       <footer class="pcard__footer">
-        <div class="pcard__price">
-          <span>售价</span>
-          <strong>{{ money(displayPrice) }}</strong>
-          <small>起</small>
-        </div>
+        <strong class="pcard__price">{{ priceText }}</strong>
         <RouterLink
           :to="`/products/${product.slug}`"
           class="pcard__cta"
@@ -204,7 +221,7 @@ onUnmounted(() => {
         >
           立即购买
           <span ref="ctaIcon" class="pcard__cta-icon" aria-hidden="true">
-            <ArrowRight :size="16" />
+            <ArrowRight :size="15" />
           </span>
         </RouterLink>
       </footer>
@@ -214,54 +231,69 @@ onUnmounted(() => {
 
 <style scoped>
 .pcard {
-  --pcard-orange: #f05a28;
-  --pcard-ink: #111827;
-  position: relative;
   min-width: 0;
   overflow: hidden;
   background: #fff;
-  border: 1px solid #dce1e7;
+  border: 1px solid #dce2ea;
   border-radius: 6px;
-  box-shadow: 0 5px 18px rgba(18, 27, 39, 0.055);
-  transform-origin: 50% 82%;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
   will-change: transform;
 }
 
 .pcard:hover,
 .pcard:focus-within {
-  border-color: #c7cdd5;
-  box-shadow: 0 15px 34px rgba(18, 27, 39, 0.11);
+  z-index: 1;
+  border-color: #9eb4d2;
+  box-shadow: 0 14px 32px rgba(28, 45, 69, 0.12);
 }
 
 .pcard__visual {
   position: relative;
-  height: 116px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  height: 82px;
+  display: grid;
+  place-items: center;
   overflow: hidden;
   isolation: isolate;
-  background: #080d14;
-  border-bottom: 1px solid #202936;
+  background: #071329;
+}
+
+.pcard__visual[data-tone='violet'] {
+  background: #100d29;
+}
+
+.pcard__visual[data-tone='emerald'] {
+  background: #071812;
+}
+
+.pcard__visual[data-tone='ember'] {
+  background: #1b0c05;
 }
 
 .pcard__network {
   position: absolute;
-  inset: -28px -22px;
+  inset: -8px;
   z-index: -1;
-  opacity: 0.86;
-  background: url('/art/network-mesh-blue.png') center / cover no-repeat;
+  opacity: 0.62;
+  background: url('/art/server-aisle-blue.png') center / cover no-repeat;
+  transform: scale(1.04);
   transform-origin: 50% 50%;
   will-change: transform;
+  pointer-events: none;
 }
 
-.pcard__visual::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: rgba(5, 9, 14, 0.22);
-  pointer-events: none;
+.pcard__visual[data-tone='violet'] .pcard__network {
+  background-image: url('/art/network-mesh-blue.png');
+  filter: hue-rotate(34deg) saturate(1.18);
+}
+
+.pcard__visual[data-tone='emerald'] .pcard__network {
+  background-image: url('/art/network-mesh-blue.png');
+  filter: hue-rotate(106deg) saturate(0.9);
+}
+
+.pcard__visual[data-tone='ember'] .pcard__network {
+  background-image: url('/art/global-routing-orange.png');
+  filter: none;
 }
 
 .pcard__brand {
@@ -269,184 +301,157 @@ onUnmounted(() => {
   z-index: 1;
   display: grid;
   place-items: center;
-  min-width: 150px;
-  min-height: 58px;
-  padding: 6px 14px;
 }
 
-.pcard__brand :deep(.platform-mark--lg) {
-  width: 62px;
-  height: 62px;
-  border-radius: 6px;
+.pcard__brand :deep(.platform-mark--md) {
+  width: 114px;
+  max-width: 70%;
+  height: 42px;
+  color: #fff;
 }
 
-.pcard__brand :deep(.platform-mark--logo.platform-mark--lg) {
-  width: 138px;
-  height: 48px;
-  border-radius: 0;
+.pcard__brand :deep(.platform-mark:not(.platform-mark--logo)) {
+  border-color: rgba(255, 255, 255, 0.35);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
 }
 
-.pcard__visual-label {
-  position: absolute;
-  right: 12px;
-  bottom: 9px;
-  color: rgba(224, 232, 240, 0.7);
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1;
+.pcard__brand :deep(.platform-mark--kookeey) {
+  padding: 8px 11px;
+  background: #0b1c16;
+}
+
+.pcard__brand :deep(.platform-mark--cliproxy img),
+.pcard__brand :deep(.platform-mark--b2proxy img),
+.pcard__brand :deep(.platform-mark--711proxy img),
+.pcard__brand :deep(.platform-mark--ipweb img) {
+  filter: brightness(0) invert(1);
 }
 
 .pcard__body {
-  padding: 15px 15px 14px;
+  padding: 11px 13px 10px;
 }
 
-.pcard__eyebrow,
-.pcard__spec-row,
-.pcard__footer {
+.pcard__title {
+  min-height: 34px;
+  margin: 0 0 5px;
+  overflow: hidden;
+  color: #151d2b;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.pcard__highlights {
+  min-height: 48px;
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  list-style: none;
+  color: #5f6b7c;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.pcard__highlights li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pcard__empty {
+  min-height: 48px;
+  display: grid;
+  align-content: start;
+  margin: 0;
+  color: #8a94a3;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.pcard__stock-row {
+  min-height: 28px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 6px;
+  margin-top: 5px;
+  color: #748092;
+  font-size: 11px;
 }
 
-.pcard__eyebrow {
-  min-height: 21px;
-  color: #667085;
-  font-size: 11px;
-  font-weight: 600;
+.pcard__stock strong {
+  color: #21935c;
+  font-weight: 700;
+}
+
+.pcard__stock.is-empty strong {
+  color: #b54708;
 }
 
 .pcard__delivery {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding: 4px 6px;
-  color: #147a43;
-  background: #edf9f1;
-  border: 1px solid #cdebd7;
+  padding: 3px 6px;
+  border: 1px solid #bfe7cf;
   border-radius: 4px;
+  color: #21935c;
+  background: #f1fbf5;
   white-space: nowrap;
 }
 
-.pcard__title {
-  min-height: 44px;
-  margin: 11px 0 5px;
-  color: var(--pcard-ink);
-  font-size: 17px;
-  font-weight: 700;
-  line-height: 1.35;
-  letter-spacing: 0;
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+.pcard__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid #edf0f4;
 }
 
-.pcard__description {
-  min-height: 40px;
-  margin: 0;
-  color: #667085;
-  font-size: 12px;
-  line-height: 1.65;
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.pcard__spec-row {
-  min-height: 28px;
-  margin-top: 11px;
-  padding-top: 10px;
-  border-top: 1px solid #edf0f3;
-  color: #475467;
-  font-size: 11px;
-}
-
-.pcard__spec {
+.pcard__price {
   min-width: 0;
   overflow: hidden;
+  color: #151d29;
+  font-family: Arial, sans-serif;
+  font-size: 17px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.pcard__stock {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  flex: none;
-  color: #198754;
-  font-variant-numeric: tabular-nums;
-}
-
-.pcard__stock i {
-  width: 6px;
-  height: 6px;
-  background: currentColor;
-  border-radius: 50%;
-  box-shadow: 0 0 0 3px rgba(25, 135, 84, 0.1);
-}
-
-.pcard__stock--empty {
-  color: #b54708;
-}
-
-.pcard__footer {
-  min-height: 44px;
-  margin-top: 10px;
-}
-
-.pcard__price {
-  display: flex;
-  align-items: baseline;
-  min-width: 0;
-  color: var(--pcard-ink);
-  white-space: nowrap;
-}
-
-.pcard__price > span {
-  margin-right: 6px;
-  color: #98a2b3;
-  font-size: 10px;
-}
-
-.pcard__price strong {
-  font-size: 20px;
-  font-weight: 750;
-  font-variant-numeric: tabular-nums;
-}
-
-.pcard__price small {
-  margin-left: 3px;
-  color: #98a2b3;
-  font-size: 10px;
-}
-
 .pcard__cta {
+  min-height: 30px;
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  flex: none;
-  min-height: 36px;
-  padding: 0 11px;
+  gap: 3px;
+  padding: 0 10px;
+  border-radius: 4px;
   color: #fff;
-  background: var(--pcard-orange);
-  border: 1px solid #dd4918;
-  border-radius: 5px;
-  box-shadow: 0 4px 10px rgba(240, 90, 40, 0.2);
-  font-size: 12px;
+  background: var(--cta, #ff4f12);
+  font-size: 11px;
   font-weight: 700;
   text-decoration: none;
 }
 
 .pcard__cta:hover {
   color: #fff;
-  background: #dc4c1c;
+  background: var(--cta-strong, #e73f06);
+  box-shadow: 0 6px 14px rgba(255, 79, 18, 0.2);
 }
 
 .pcard__cta:focus-visible {
-  outline: 3px solid rgba(240, 90, 40, 0.28);
+  outline: 3px solid rgba(255, 79, 18, 0.28);
   outline-offset: 2px;
 }
 
@@ -456,13 +461,13 @@ onUnmounted(() => {
   will-change: transform;
 }
 
-@media (max-width: 430px) {
+@media (max-width: 480px) {
   .pcard__visual {
-    height: 108px;
+    height: 112px;
   }
 
-  .pcard__body {
-    padding: 14px;
+  .pcard__title {
+    min-height: 0;
   }
 }
 
