@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -77,14 +79,36 @@ func seedFixture(t *testing.T, app *App, balance int64, secrets ...string) testF
 	if err := app.db.Create(&batch).Error; err != nil {
 		t.Fatal(err)
 	}
-	for _, secret := range secrets {
+	for i, secret := range secrets {
 		ciphertext, _ := encryptString(app.config.CardEncryptKey, secret)
-		card := Card{SKUID: sku.ID, BatchID: batch.ID, SecretCiphertext: ciphertext, SecretHash: keyedHash(app.config.CardHashKey, secret), KeyVersion: 1, Status: "available"}
+		claimCode := normalizeClaimCode("TRAF-TEST-" + randomID("C") + "-" + strconv.Itoa(i+1))
+		card := Card{
+			SKUID:            sku.ID,
+			BatchID:          batch.ID,
+			SecretCiphertext: ciphertext,
+			SecretHash:       keyedHash(app.config.CardHashKey, secret),
+			ClaimCode:        claimCode,
+			ClaimCodeHash:    keyedHash(app.config.CardHashKey, claimCode),
+			KeyVersion:       1,
+			Status:           "available",
+		}
 		if err := app.db.Create(&card).Error; err != nil {
 			t.Fatal(err)
 		}
 	}
 	return testFixture{User: user, SKU: sku}
+}
+
+func firstClaimCode(t *testing.T, app *App, skuID uint) (string, Card) {
+	t.Helper()
+	var card Card
+	if err := app.db.Where("sku_id = ?", skuID).Order("id").First(&card).Error; err != nil {
+		t.Fatal(err)
+	}
+	if card.ClaimCode == "" {
+		t.Fatal("missing claim code")
+	}
+	return card.ClaimCode, card
 }
 
 func TestBalancePurchaseIsAtomicAndIdempotent(t *testing.T) {
@@ -537,10 +561,237 @@ func TestRegistrationCodeSendIsThrottledAndSMTPFailureLeavesNoCode(t *testing.T)
 	}
 }
 
+func TestAdminExportAndAllocateSKUCards(t *testing.T) {
+	app := testApp(t)
+	fixture := seedFixture(t, app, 0, "EXPORT-A", "EXPORT-B", "EXPORT-C")
+	hash, _ := passwordHash("password123")
+	admin := User{Username: randomID("admin"), Email: randomID("admin") + "@example.test", PasswordHash: hash, Role: "admin", Status: "active"}
+	if err := app.db.Create(&admin).Error; err != nil {
+		t.Fatal(err)
+	}
+	token, err := issueToken(app.config.JWTSecret, admin)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	exportReq := httptest.NewRequest(http.MethodGet, "/api/v1/admin/skus/"+itoa(fixture.SKU.ID)+"/cards/export?limit=2", nil)
+	exportReq.Header.Set("Authorization", "Bearer "+token)
+	exportRes := httptest.NewRecorder()
+	app.router.ServeHTTP(exportRes, exportReq)
+	if exportRes.Code != http.StatusOK {
+		t.Fatalf("export status=%d body=%s", exportRes.Code, exportRes.Body.String())
+	}
+	var exportPayload struct {
+		Count   int      `json:"count"`
+		Secrets []string `json:"secrets"`
+	}
+	if err := json.Unmarshal(exportRes.Body.Bytes(), &exportPayload); err != nil {
+		t.Fatal(err)
+	}
+	if exportPayload.Count != 2 || len(exportPayload.Secrets) != 2 {
+		t.Fatalf("export payload=%+v", exportPayload)
+	}
+	var stillAvailable int64
+	app.db.Model(&Card{}).Where("sku_id = ? AND status = ?", fixture.SKU.ID, "available").Count(&stillAvailable)
+	if stillAvailable != 3 {
+		t.Fatalf("export should not change status, available=%d", stillAvailable)
+	}
+
+	allocateRes := postJSONAuth(app, http.MethodPost, "/api/v1/admin/skus/"+itoa(fixture.SKU.ID)+"/cards/allocate", map[string]any{"count": 2, "mark_as": "allocated"}, token)
+	if allocateRes.Code != http.StatusOK {
+		t.Fatalf("allocate status=%d body=%s", allocateRes.Code, allocateRes.Body.String())
+	}
+	var allocatePayload struct {
+		Count   int      `json:"count"`
+		Status  string   `json:"status"`
+		Secrets []string `json:"secrets"`
+	}
+	if err := json.Unmarshal(allocateRes.Body.Bytes(), &allocatePayload); err != nil {
+		t.Fatal(err)
+	}
+	if allocatePayload.Count != 2 || allocatePayload.Status != "allocated" || len(allocatePayload.Secrets) != 2 {
+		t.Fatalf("allocate payload=%+v", allocatePayload)
+	}
+	var allocated, available int64
+	app.db.Model(&Card{}).Where("sku_id = ? AND status = ?", fixture.SKU.ID, "allocated").Count(&allocated)
+	app.db.Model(&Card{}).Where("sku_id = ? AND status = ?", fixture.SKU.ID, "available").Count(&available)
+	if allocated != 2 || available != 1 {
+		t.Fatalf("allocated=%d available=%d", allocated, available)
+	}
+}
+
+func TestPublicTrafficClaimByClaimCode(t *testing.T) {
+	app := testApp(t)
+	fixture := seedFixture(t, app, 0, "UPSTREAM-SECRET-001")
+	claimCode, cardBefore := firstClaimCode(t, app, fixture.SKU.ID)
+	if claimCode == "UPSTREAM-SECRET-001" {
+		t.Fatal("claim code must differ from upstream secret")
+	}
+
+	bySecret := postJSON(app, "/api/v1/public/traffic/claim", map[string]string{"claim_code": "UPSTREAM-SECRET-001"})
+	if bySecret.Code != http.StatusNotFound {
+		t.Fatalf("secret as claim should 404, got %d %s", bySecret.Code, bySecret.Body.String())
+	}
+
+	first := postJSON(app, "/api/v1/public/traffic/claim", map[string]string{
+		"claim_code":     claimCode,
+		"query_password": "QueryPass1",
+	})
+	if first.Code != http.StatusOK {
+		t.Fatalf("first claim status=%d body=%s", first.Code, first.Body.String())
+	}
+	var payload struct {
+		ProductName string   `json:"product_name"`
+		SKUName     string   `json:"sku_name"`
+		Secrets     []string `json:"secrets"`
+		ClaimedAt   string   `json:"claimed_at"`
+		Replay      bool     `json:"replay"`
+	}
+	if err := json.Unmarshal(first.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.ProductName != "测试商品" || payload.SKUName != "标准规格" || len(payload.Secrets) != 1 || payload.Secrets[0] != "UPSTREAM-SECRET-001" || payload.ClaimedAt == "" || payload.Replay {
+		t.Fatalf("claim payload=%+v", payload)
+	}
+	var card Card
+	if err := app.db.First(&card, cardBefore.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if card.Status != "sold" || card.SoldAt == nil || card.ClaimedAt == nil || card.QueryPasswordHash == "" {
+		t.Fatalf("card not marked sold/claimed: %+v", card)
+	}
+
+	second := postJSON(app, "/api/v1/public/traffic/claim", map[string]string{"claim_code": claimCode})
+	if second.Code != http.StatusConflict || !bytes.Contains(second.Body.Bytes(), []byte("claim_already_used")) {
+		t.Fatalf("second claim status=%d body=%s", second.Code, second.Body.String())
+	}
+	if bytes.Contains(second.Body.Bytes(), []byte("UPSTREAM-SECRET-001")) {
+		t.Fatalf("used claim must not re-reveal secret: %s", second.Body.String())
+	}
+
+	replay := postJSON(app, "/api/v1/public/traffic/claim", map[string]string{
+		"claim_code":     claimCode,
+		"query_password": "QueryPass1",
+	})
+	if replay.Code != http.StatusOK {
+		t.Fatalf("replay status=%d body=%s", replay.Code, replay.Body.String())
+	}
+	var replayPayload struct {
+		Secrets []string `json:"secrets"`
+		Replay  bool     `json:"replay"`
+	}
+	if err := json.Unmarshal(replay.Body.Bytes(), &replayPayload); err != nil {
+		t.Fatal(err)
+	}
+	if !replayPayload.Replay || len(replayPayload.Secrets) != 1 || replayPayload.Secrets[0] != "UPSTREAM-SECRET-001" {
+		t.Fatalf("replay payload=%+v", replayPayload)
+	}
+
+	missing := postJSON(app, "/api/v1/public/traffic/claim", map[string]string{"claim_code": "NOT-EXIST"})
+	if missing.Code != http.StatusNotFound {
+		t.Fatalf("missing claim status=%d body=%s", missing.Code, missing.Body.String())
+	}
+}
+
+func TestAdminExportReturnsClaimCodesNotSecrets(t *testing.T) {
+	app := testApp(t)
+	fixture := seedFixture(t, app, 0, "REAL-SECRET-A", "REAL-SECRET-B")
+	hash, _ := passwordHash("password123")
+	admin := User{Username: randomID("admin"), Email: randomID("admin") + "@example.test", PasswordHash: hash, Role: "admin", Status: "active"}
+	if err := app.db.Create(&admin).Error; err != nil {
+		t.Fatal(err)
+	}
+	token, err := issueToken(app.config.JWTSecret, admin)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	exportReq := httptest.NewRequest(http.MethodGet, "/api/v1/admin/skus/"+itoa(fixture.SKU.ID)+"/cards/export?limit=2", nil)
+	exportReq.Header.Set("Authorization", "Bearer "+token)
+	exportRes := httptest.NewRecorder()
+	app.router.ServeHTTP(exportRes, exportReq)
+	if exportRes.Code != http.StatusOK {
+		t.Fatalf("export status=%d body=%s", exportRes.Code, exportRes.Body.String())
+	}
+	var exportPayload struct {
+		Count      int      `json:"count"`
+		Secrets    []string `json:"secrets"`
+		ClaimCodes []string `json:"claim_codes"`
+		Items      []struct {
+			ClaimCode     string `json:"claim_code"`
+			QueryPassword string `json:"query_password"`
+			Secret        string `json:"secret"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(exportRes.Body.Bytes(), &exportPayload); err != nil {
+		t.Fatal(err)
+	}
+	if exportPayload.Count != 2 || len(exportPayload.ClaimCodes) != 2 || len(exportPayload.Items) != 2 {
+		t.Fatalf("export payload=%+v", exportPayload)
+	}
+	for _, item := range exportPayload.Items {
+		if item.ClaimCode == "" || !strings.HasPrefix(item.ClaimCode, "TRAF-") {
+			t.Fatalf("expected TRAF claim code, got %+v", item)
+		}
+		if item.Secret != "" {
+			t.Fatalf("default export must not include real secret: %+v", item)
+		}
+		if item.QueryPassword == "" {
+			t.Fatalf("export should include query password once: %+v", item)
+		}
+		if item.ClaimCode == "REAL-SECRET-A" || item.ClaimCode == "REAL-SECRET-B" {
+			t.Fatalf("claim code leaked real secret")
+		}
+	}
+	for _, s := range exportPayload.Secrets {
+		if s == "REAL-SECRET-A" || s == "REAL-SECRET-B" {
+			t.Fatalf("legacy secrets field still has real secret: %v", exportPayload.Secrets)
+		}
+	}
+
+	allocateRes := postJSONAuth(app, http.MethodPost, "/api/v1/admin/skus/"+itoa(fixture.SKU.ID)+"/cards/allocate", map[string]any{"count": 1, "mark_as": "allocated"}, token)
+	if allocateRes.Code != http.StatusOK {
+		t.Fatalf("allocate status=%d body=%s", allocateRes.Code, allocateRes.Body.String())
+	}
+	var allocatePayload struct {
+		Items []struct {
+			ClaimCode string `json:"claim_code"`
+			Status    string `json:"status"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(allocateRes.Body.Bytes(), &allocatePayload); err != nil {
+		t.Fatal(err)
+	}
+	if len(allocatePayload.Items) != 1 || allocatePayload.Items[0].Status != "allocated" {
+		t.Fatalf("allocate payload=%+v", allocatePayload)
+	}
+	claim := postJSON(app, "/api/v1/public/traffic/claim", map[string]string{"claim_code": allocatePayload.Items[0].ClaimCode})
+	if claim.Code != http.StatusOK {
+		t.Fatalf("allocated card claim status=%d body=%s", claim.Code, claim.Body.String())
+	}
+	if !bytes.Contains(claim.Body.Bytes(), []byte("REAL-SECRET-")) {
+		t.Fatalf("claim should reveal real secret: %s", claim.Body.String())
+	}
+}
+
+func itoa(v uint) string {
+	return strconv.FormatUint(uint64(v), 10)
+}
+
 func postJSON(app *App, path string, body any) *httptest.ResponseRecorder {
 	data, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(data))
 	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	app.router.ServeHTTP(res, req)
+	return res
+}
+
+func postJSONAuth(app *App, method, path string, body any, token string) *httptest.ResponseRecorder {
+	data, _ := json.Marshal(body)
+	req := httptest.NewRequest(method, path, bytes.NewReader(data))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
 	res := httptest.NewRecorder()
 	app.router.ServeHTTP(res, req)
 	return res

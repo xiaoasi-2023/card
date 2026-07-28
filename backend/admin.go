@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -301,8 +302,21 @@ func (a *App) adminImportCards(c *gin.Context) {
 			if err != nil {
 				return err
 			}
-			row := Card{SKUID: req.SKUID, BatchID: batch.ID, SecretCiphertext: ciphertext, SecretHash: digest, KeyVersion: 1, Status: "available"}
-			if err := tx.Create(&row).Error; err != nil {
+			claimCode, claimHash, err := a.allocateUniqueClaimCode(tx)
+			if err != nil {
+				return err
+			}
+			row := Card{
+				SKUID:            req.SKUID,
+				BatchID:          batch.ID,
+				SecretCiphertext: ciphertext,
+				SecretHash:       digest,
+				ClaimCode:        claimCode,
+				ClaimCodeHash:    claimHash,
+				KeyVersion:       1,
+				Status:           "available",
+			}
+if err := tx.Create(&row).Error; err != nil {
 				return err
 			}
 			batch.SuccessCount++
@@ -335,9 +349,11 @@ type adminCardView struct {
 	SKUID           uint   `json:"sku_id"`
 	BatchID         uint   `json:"batch_id"`
 	Status          string `json:"status"`
+	ClaimCode       string `json:"claim_code,omitempty"`
 	Secret          string `json:"secret"`
 	ReservedOrderID *uint  `json:"reserved_order_id,omitempty"`
 	SoldOrderID     *uint  `json:"sold_order_id,omitempty"`
+	ClaimedAt       string `json:"claimed_at,omitempty"`
 }
 
 func (a *App) adminListCards(c *gin.Context) {
@@ -360,7 +376,20 @@ func (a *App) adminListCards(c *gin.Context) {
 			fail(c, 500, "decrypt_failed", "卡密解密失败")
 			return
 		}
-		views = append(views, adminCardView{ID: row.ID, SKUID: row.SKUID, BatchID: row.BatchID, Status: row.Status, Secret: secret, ReservedOrderID: row.ReservedOrderID, SoldOrderID: row.SoldOrderID})
+		view := adminCardView{
+			ID:              row.ID,
+			SKUID:           row.SKUID,
+			BatchID:         row.BatchID,
+			Status:          row.Status,
+			ClaimCode:       row.ClaimCode,
+			Secret:          secret,
+			ReservedOrderID: row.ReservedOrderID,
+			SoldOrderID:     row.SoldOrderID,
+		}
+		if row.ClaimedAt != nil {
+			view.ClaimedAt = row.ClaimedAt.UTC().Format(time.RFC3339)
+		}
+		views = append(views, view)
 	}
 	a.audit(c, "card.list", "card", 0, "")
 	c.JSON(200, gin.H{"items": views})

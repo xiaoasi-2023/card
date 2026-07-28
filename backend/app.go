@@ -25,6 +25,8 @@ type App struct {
 	router         *gin.Engine
 	writeMu        sync.Mutex
 	verificationMu sync.Mutex
+	claimRateMu    sync.Mutex
+	claimHits      map[string][]time.Time
 	mailer         registrationMailer
 }
 
@@ -58,7 +60,19 @@ func newApp(config Config) (*App, error) {
 	if err := db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_trade_no ON payments(provider_trade_no) WHERE provider_trade_no <> ''").Error; err != nil {
 		return nil, fmt.Errorf("create payment index: %w", err)
 	}
-	app := &App{config: config, db: db, mailer: newSMTPMailer(config)}
+	app := &App{config: config, db: db, mailer: newSMTPMailer(config), claimHits: map[string][]time.Time{}}
+	if err := app.backfillClaimCodes(); err != nil {
+		return nil, fmt.Errorf("backfill claim codes: %w", err)
+	}
+	// 领取码 / 哈希部分唯一索引：空值可共存，回填后非空值唯一。
+	for _, stmt := range []string{
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_cards_claim_code_unique ON cards(claim_code) WHERE claim_code <> ''",
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_cards_claim_code_hash_unique ON cards(claim_code_hash) WHERE claim_code_hash <> ''",
+	} {
+		if err := db.Exec(stmt).Error; err != nil {
+			return nil, fmt.Errorf("create claim index: %w", err)
+		}
+	}
 	if err := app.bootstrapAdmin(); err != nil {
 		return nil, err
 	}
@@ -105,6 +119,7 @@ func (a *App) routes() *gin.Engine {
 	pub.GET("/platforms", a.listPublicPlatforms)
 	pub.GET("/products", a.listPublicProducts)
 	pub.GET("/products/:slug", a.getPublicProduct)
+	pub.POST("/traffic/claim", a.publicTrafficClaim)
 
 	auth := v1.Group("/auth")
 	auth.POST("/registration-codes", a.sendRegistrationCode)
@@ -149,6 +164,8 @@ func (a *App) routes() *gin.Engine {
 	admin.GET("/card-batches/:id", a.adminGetBatch)
 	admin.GET("/cards", a.adminListCards)
 	admin.PUT("/cards/:id", a.adminUpdateCard)
+	admin.GET("/skus/:id/cards/export", a.adminExportSKUCards)
+	admin.POST("/skus/:id/cards/allocate", a.adminAllocateSKUCards)
 	admin.GET("/orders", a.adminListOrders)
 	admin.GET("/orders/:order_no", a.adminGetOrder)
 	admin.GET("/payments", a.adminListPayments)

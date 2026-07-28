@@ -69,6 +69,29 @@ func keyedHash(key, value string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
+// normalizeClaimCode 规范化领取码：去空白、统一大写。
+func normalizeClaimCode(value string) string {
+	return strings.ToUpper(strings.TrimSpace(value))
+}
+
+// generateClaimCode 生成 TRAF- 前缀领取码（与上游真卡密无关）。
+func generateClaimCode() (string, error) {
+	raw := make([]byte, 10)
+	if _, err := io.ReadFull(rand.Reader, raw); err != nil {
+		return "", err
+	}
+	return "TRAF-" + strings.ToUpper(hex.EncodeToString(raw)), nil
+}
+
+// generateQueryPassword 生成短查单密码，便于与领取码一并灌小铺或售后使用。
+func generateQueryPassword() (string, error) {
+	raw := make([]byte, 5)
+	if _, err := io.ReadFull(rand.Reader, raw); err != nil {
+		return "", err
+	}
+	return strings.ToUpper(hex.EncodeToString(raw)), nil
+}
+
 func signPayment(key string, req paymentCallbackRequest) string {
 	canonical := fmt.Sprintf("%s|%s|%s|%d|%s|%d", req.MerchantID, req.OrderNo, req.TradeNo, req.AmountCents, req.Currency, req.Timestamp)
 	return keyedHash(key, canonical)

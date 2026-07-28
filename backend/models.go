@@ -97,13 +97,21 @@ type Card struct {
 	BatchID          uint       `gorm:"not null;index" json:"batch_id"`
 	SecretCiphertext string     `gorm:"type:text;not null" json:"-"`
 	SecretHash       string     `gorm:"size:64;uniqueIndex;not null" json:"-"`
-	KeyVersion       int        `gorm:"not null;default:1" json:"key_version"`
-	Status           string     `gorm:"size:16;not null;index:idx_card_allocate,priority:2;index:idx_card_expire,priority:1" json:"status"`
-	ReservedOrderID  *uint      `gorm:"index" json:"reserved_order_id"`
-	ReservedUntil    *time.Time `gorm:"index:idx_card_expire,priority:2" json:"reserved_until"`
-	SoldOrderID      *uint      `gorm:"index" json:"sold_order_id"`
-	SoldAt           *time.Time `json:"sold_at"`
-	CreatedAt        time.Time  `json:"created_at"`
+	// ClaimCode 是灌给小铺/用户的领取码（TRAF-...），与上游真卡密分离。
+	// 唯一性由 newApp 中的部分唯一索引保证（允许历史空值回填）。
+	ClaimCode string `gorm:"size:64;index" json:"claim_code,omitempty"`
+	// ClaimCodeHash 用于公开领取查询，避免大小写与空白差异。
+	ClaimCodeHash string `gorm:"size:64;index" json:"-"`
+	// QueryPasswordHash 可选查单密码；首次领取可绑定，之后凭密码再次查看明文。
+	QueryPasswordHash string `gorm:"size:255" json:"-"`
+	KeyVersion        int    `gorm:"not null;default:1" json:"key_version"`
+	Status            string `gorm:"size:16;not null;index:idx_card_allocate,priority:2;index:idx_card_expire,priority:1" json:"status"`
+	ReservedOrderID   *uint  `gorm:"index" json:"reserved_order_id"`
+	ReservedUntil     *time.Time `gorm:"index:idx_card_expire,priority:2" json:"reserved_until"`
+	SoldOrderID       *uint      `gorm:"index" json:"sold_order_id"`
+	SoldAt            *time.Time `json:"sold_at"`
+	ClaimedAt         *time.Time `json:"claimed_at,omitempty"`
+	CreatedAt         time.Time  `json:"created_at"`
 }
 
 type Order struct {
