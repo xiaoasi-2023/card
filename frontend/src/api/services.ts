@@ -5,8 +5,13 @@ const fromCents = (value: unknown) => Number(value || 0) / 100
 const toCents = (value: unknown) => Math.round(Number(value || 0) * 100)
 const rawRows = <T>(value: any): T[] => Array.isArray(value) ? value : value?.items || []
 const platform = (v: any): Platform => ({ ...v, slug: v.slug || v.code, enabled: v.enabled ?? v.status === 'active' })
-const sku = (v: any): Sku => ({ ...v, price: v.price ?? fromCents(v.sale_price_cents), enabled: v.enabled ?? v.status === 'active' })
 const productBase = (v: any): Product => ({ ...v, platform: v.platform ? platform(v.platform) : undefined, enabled: v.enabled ?? v.status === 'active' })
+const sku = (v: any): Sku => ({
+  ...v,
+  price: v.price ?? fromCents(v.sale_price_cents),
+  enabled: v.enabled ?? v.status === 'active',
+  product: v.product ? productBase(v.product) : undefined
+})
 const productDetail = (v: any): Product => {
   const base = v?.product ? productBase(v.product) : productBase(v)
   const skus = rawRows<any>(v?.skus || v?.product?.skus || base.skus).map(sku)

@@ -162,7 +162,9 @@ func (a *App) adminDeleteProduct(c *gin.Context) {
 
 func (a *App) adminListSKUs(c *gin.Context) {
 	var rows []SKU
-	query := a.db.Preload("Product").Order("id DESC")
+	// Product.Platform is required so admin SKU pickers can distinguish
+	// identical traffic names across platforms (e.g. "10G 流量").
+	query := a.db.Preload("Product.Platform").Order("id DESC")
 	if v := c.Query("product_id"); v != "" {
 		query = query.Where("product_id = ?", v)
 	}
