@@ -6,6 +6,10 @@ export interface Sku {
   name: string
   price: number | string
   stock?: number
+  stock_available?: number
+  stock_allocated?: number
+  stock_sold?: number
+  stock_total?: number
   stock_status?: string
   enabled?: boolean
 }

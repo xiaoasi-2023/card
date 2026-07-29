@@ -9,6 +9,7 @@ const productBase = (v: any): Product => ({ ...v, platform: v.platform ? platfor
 const sku = (v: any): Sku => ({
   ...v,
   price: v.price ?? fromCents(v.sale_price_cents),
+  stock: v.stock ?? v.stock_available ?? v.stock_count,
   enabled: v.enabled ?? v.status === 'active',
   product: v.product ? productBase(v.product) : undefined
 })
@@ -89,6 +90,14 @@ function adminRows<T>(path: string, value: any): T[] {
   if (path === 'skus') return list.map(sku) as T[]
   if (path === 'orders') return list.map(order) as T[]
   if (path === 'payments') return list.map(payment) as T[]
+  if (path === 'cards') {
+    return list.map((v: any) => ({
+      ...v,
+      claim_code: v.claim_code || '',
+      masked_value: v.masked_value || v.value_masked || v.claim_code || v.secret_masked || '••••••••',
+      value_masked: v.value_masked || v.masked_value || v.claim_code || v.secret_masked || '••••••••',
+    })) as T[]
+  }
   return list
 }
 export const adminApi = {

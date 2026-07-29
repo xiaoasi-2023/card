@@ -172,7 +172,32 @@ func (a *App) adminListSKUs(c *gin.Context) {
 		fail(c, 500, "internal_error", "查询失败")
 		return
 	}
-	c.JSON(200, gin.H{"items": rows})
+	items := make([]gin.H, 0, len(rows))
+	for _, row := range rows {
+		var available, allocated, sold, total int64
+		_ = a.db.Model(&Card{}).Where("sku_id = ? AND status = ?", row.ID, "available").Count(&available).Error
+		_ = a.db.Model(&Card{}).Where("sku_id = ? AND status = ?", row.ID, "allocated").Count(&allocated).Error
+		_ = a.db.Model(&Card{}).Where("sku_id = ? AND status = ?", row.ID, "sold").Count(&sold).Error
+		_ = a.db.Model(&Card{}).Where("sku_id = ?", row.ID).Count(&total).Error
+		items = append(items, gin.H{
+			"id":               row.ID,
+			"product_id":       row.ProductID,
+			"product":          row.Product,
+			"name":             row.Name,
+			"attrs_json":       row.AttrsJSON,
+			"sale_price_cents": row.SalePriceCents,
+			"status":           row.Status,
+			"created_at":       row.CreatedAt,
+			"updated_at":       row.UpdatedAt,
+			// 可兑换库存 = available + allocated
+			"stock":           available + allocated,
+			"stock_available": available,
+			"stock_allocated": allocated,
+			"stock_sold":      sold,
+			"stock_total":     total,
+		})
+	}
+	c.JSON(200, gin.H{"items": items})
 }
 
 func (a *App) adminCreateSKU(c *gin.Context) {
@@ -318,7 +343,7 @@ func (a *App) adminImportCards(c *gin.Context) {
 				KeyVersion:       1,
 				Status:           "available",
 			}
-if err := tx.Create(&row).Error; err != nil {
+			if err := tx.Create(&row).Error; err != nil {
 				return err
 			}
 			batch.SuccessCount++
@@ -330,7 +355,28 @@ if err := tx.Create(&row).Error; err != nil {
 		return
 	}
 	a.audit(c, "card.import", "card_batch", batch.ID, "")
-	c.JSON(201, gin.H{"batch": batch, "invalid_lines": invalidLines, "duplicate_lines": duplicateLines})
+	var imported []Card
+	_ = a.db.Where("batch_id = ?", batch.ID).Order("id").Find(&imported).Error
+	claimCodes := make([]string, 0, len(imported))
+	items := make([]gin.H, 0, len(imported))
+	for _, card := range imported {
+		claimCodes = append(claimCodes, card.ClaimCode)
+		items = append(items, gin.H{
+			"id":         card.ID,
+			"sku_id":     card.SKUID,
+			"claim_code": card.ClaimCode,
+			"status":     card.Status,
+		})
+	}
+	c.JSON(201, gin.H{
+		"batch":           batch,
+		"invalid_lines":   invalidLines,
+		"duplicate_lines": duplicateLines,
+		"claim_codes":     claimCodes,
+		"items":           items,
+		// 兼容旧前端：secrets 现为领取码，不是上游明文
+		"secrets": claimCodes,
+	})
 }
 
 func (a *App) adminGetBatch(c *gin.Context) {
@@ -351,11 +397,30 @@ type adminCardView struct {
 	SKUID           uint   `json:"sku_id"`
 	BatchID         uint   `json:"batch_id"`
 	Status          string `json:"status"`
-	ClaimCode       string `json:"claim_code,omitempty"`
-	Secret          string `json:"secret"`
+	ClaimCode       string `json:"claim_code"`
+	SecretMasked    string `json:"secret_masked"`
+	Secret          string `json:"secret,omitempty"`
+	// 兼容旧前端字段名
+	MaskedValue     string `json:"masked_value"`
+	ValueMasked     string `json:"value_masked"`
 	ReservedOrderID *uint  `json:"reserved_order_id,omitempty"`
 	SoldOrderID     *uint  `json:"sold_order_id,omitempty"`
 	ClaimedAt       string `json:"claimed_at,omitempty"`
+}
+
+func maskSecret(secret string) string {
+	secret = strings.TrimSpace(secret)
+	if secret == "" {
+		return "••••••••"
+	}
+	runers := []rune(secret)
+	if len(runers) <= 4 {
+		return string(runers[:1]) + "****"
+	}
+	if len(runers) <= 8 {
+		return string(runers[:2]) + "****" + string(runers[len(runers)-2:])
+	}
+	return string(runers[:3]) + "****" + string(runers[len(runers)-3:])
 }
 
 func (a *App) adminListCards(c *gin.Context) {
@@ -367,6 +432,11 @@ func (a *App) adminListCards(c *gin.Context) {
 	if v := c.Query("status"); v != "" {
 		query = query.Where("status = ?", v)
 	}
+	if v := strings.TrimSpace(c.Query("q")); v != "" {
+		like := "%" + v + "%"
+		query = query.Where("claim_code LIKE ? OR CAST(id AS TEXT) LIKE ?", like, like)
+	}
+	includeSecret := queryTruthy(c.Query("include_secret"))
 	if err := paginate(c, query, &rows); err != nil {
 		fail(c, 500, "internal_error", "查询失败")
 		return
@@ -378,15 +448,25 @@ func (a *App) adminListCards(c *gin.Context) {
 			fail(c, 500, "decrypt_failed", "卡密解密失败")
 			return
 		}
+		masked := maskSecret(secret)
+		display := strings.TrimSpace(row.ClaimCode)
+		if display == "" {
+			display = masked
+		}
 		view := adminCardView{
 			ID:              row.ID,
 			SKUID:           row.SKUID,
 			BatchID:         row.BatchID,
 			Status:          row.Status,
 			ClaimCode:       row.ClaimCode,
-			Secret:          secret,
+			SecretMasked:    masked,
+			MaskedValue:     display,
+			ValueMasked:     display,
 			ReservedOrderID: row.ReservedOrderID,
 			SoldOrderID:     row.SoldOrderID,
+		}
+		if includeSecret {
+			view.Secret = secret
 		}
 		if row.ClaimedAt != nil {
 			view.ClaimedAt = row.ClaimedAt.UTC().Format(time.RFC3339)
