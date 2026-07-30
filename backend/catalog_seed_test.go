@@ -39,7 +39,7 @@ func TestSeedDefaultCatalogIsIdempotentAndDoesNotCreateCards(t *testing.T) {
 	app.db.Model(&Product{}).Where("status = ?", "active").Count(&activeProductCount)
 	app.db.Model(&SKU{}).Where("status = ?", "active").Count(&activeSKUCount)
 	app.db.Model(&Card{}).Count(&cardCount)
-	if activePlatformCount != 7 || activeProductCount != 14 || activeSKUCount != 14 {
+	if activePlatformCount != 6 || activeProductCount != 12 || activeSKUCount != 12 {
 		t.Fatalf("active counts: platforms=%d products=%d skus=%d", activePlatformCount, activeProductCount, activeSKUCount)
 	}
 	if cardCount != 0 {
@@ -49,7 +49,7 @@ func TestSeedDefaultCatalogIsIdempotentAndDoesNotCreateCards(t *testing.T) {
 	var cheapCount, largeCount int64
 	app.db.Model(&SKU{}).Where("status = ? AND sale_price_cents = ?", "active", 500).Count(&cheapCount)
 	app.db.Model(&SKU{}).Where("status = ? AND sale_price_cents = ?", "active", 4500).Count(&largeCount)
-	if cheapCount != 7 || largeCount != 7 {
+	if cheapCount != 6 || largeCount != 6 {
 		t.Fatalf("price counts: 500=%d 4500=%d", cheapCount, largeCount)
 	}
 

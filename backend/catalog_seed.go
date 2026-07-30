@@ -40,7 +40,6 @@ var defaultCatalogPlatforms = []catalogPlatformSpec{
 	{Code: "kookeey", Name: "Kookeey", Website: "https://www.kookeey.com/", Sort: 60},
 	{Code: "b2proxy", Name: "B2Proxy", Website: "http://b2proxy.com/", Sort: 50},
 	{Code: "711proxy", Name: "711Proxy", Website: "https://711proxy.com/", Sort: 40},
-	{Code: "ipweb", Name: "IPWEB", Website: "https://www.ipweb.cc/", Sort: 30},
 	{Code: "bunnyproxy", Name: "BunnyProxy", Website: "https://app.bunnyproxy.com/", Sort: 20},
 	{Code: "udealproxy", Name: "UdealProxy", Website: "http://www.udealproxy.com/", Sort: 10},
 }

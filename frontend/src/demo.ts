@@ -2,7 +2,7 @@ import type { Platform, Product } from '@/types'
 export const demoPlatforms: Platform[] = [
   { id: 1, name: 'CliProxy', slug: 'cliproxy' }, { id: 2, name: 'Kookeey', slug: 'kookeey' },
   { id: 3, name: 'B2Proxy', slug: 'b2proxy' }, { id: 4, name: '711Proxy', slug: '711proxy' },
-  { id: 5, name: 'IPWEB', slug: 'ipweb' }, { id: 6, name: 'BunnyProxy', slug: 'bunnyproxy' },
+  { id: 6, name: 'BunnyProxy', slug: 'bunnyproxy' },
   { id: 7, name: 'UdealProxy', slug: 'udealproxy' }
 ]
 export const demoProducts: Product[] = [

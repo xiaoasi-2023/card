@@ -178,9 +178,6 @@ function buy(guest = false) {
 .detail-visual :deep(.platform-mark--cliproxy img),
 .detail-visual :deep(.platform-mark--b2proxy img),
 .detail-visual :deep(.platform-mark--711proxy img),
-.detail-visual :deep(.platform-mark--ipweb img) {
-  filter: brightness(0) invert(1);
-}
 
 .breadcrumb a {
   color: var(--brand);

@@ -8,7 +8,6 @@ const brandLogos: Record<string, string> = {
   kookeey: '/brands/kookeey.svg',
   b2proxy: '/brands/b2proxy.webp',
   '711proxy': '/brands/711proxy-header.webp',
-  ipweb: '/brands/ipweb.svg',
   bunnyproxy: '/brands/bunnyproxy.png',
   udealproxy: '/brands/udealproxy-logo-new.png',
 }

@@ -324,9 +324,6 @@ onUnmounted(() => {
 .pcard__brand :deep(.platform-mark--cliproxy img),
 .pcard__brand :deep(.platform-mark--b2proxy img),
 .pcard__brand :deep(.platform-mark--711proxy img),
-.pcard__brand :deep(.platform-mark--ipweb img) {
-  filter: brightness(0) invert(1);
-}
 
 .pcard__body {
   padding: 11px 13px 10px;
